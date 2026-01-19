@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { NewTabParameters, PartialProfile, ProfileProvider, Profile } from 'tabby-core'
+import { NewTabParameters, PartialProfile, ProfileProvider } from 'tabby-core'
 import { BaseTerminalProfile } from 'tabby-terminal'
 import { WSTermProfileSettingsComponent } from './components/wsTermProfileSettings.component'
 import { WSTermTabComponent } from './components/wsTermTab.component'

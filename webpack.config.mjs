@@ -75,6 +75,13 @@ export default () => {
         directTemplateLoading: false,
         jitMode: true,
       }),
+      // Ignore optional dependencies of 'ws' package
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^bufferutil$/,
+      }),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^utf-8-validate$/,
+      }),
     ],
   }
 }
