@@ -1,6 +1,7 @@
 import { Logger } from 'tabby-core'
 import { BaseSession } from 'tabby-terminal'
 import { Subject, Observable } from 'rxjs'
+import WebSocket from 'ws'
 
 import { WSTermProfile } from './profiles'
 
@@ -33,9 +34,22 @@ export class WSTermSession extends BaseSession {
 
         return new Promise((resolve, reject) => {
             try {
-                this.socket = new WebSocket(wsUrl)
+                // Parse the URL to get the origin
+                const url = new URL(wsUrl)
+                const origin = `https://${url.host}`
 
-                this.socket.onopen = () => {
+                // Create WebSocket with custom headers for better compatibility
+                this.socket = new WebSocket(wsUrl, {
+                    headers: {
+                        'Origin': origin,
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
+                    },
+                })
+
+                this.socket.on('open', () => {
                     this.emitServiceMessage('Connected')
                     this.open = true
                     // Send initial resize if we have size info
@@ -43,38 +57,41 @@ export class WSTermSession extends BaseSession {
                         this.resize(this.lastWidth, this.lastHeight)
                     }
                     resolve()
-                }
+                })
 
-                this.socket.onmessage = (event) => {
-                    this.handleMessage(event.data)
-                }
+                this.socket.on('message', (data: WebSocket.Data) => {
+                    this.handleMessage(data)
+                })
 
-                this.socket.onerror = (err) => {
-                    this.emitServiceMessage(`WebSocket error: ${err}`)
-                    reject(new Error('WebSocket connection failed'))
-                }
+                this.socket.on('error', (err: Error) => {
+                    this.emitServiceMessage(`WebSocket error: ${err.message}`)
+                    reject(new Error('WebSocket connection failed: ' + err.message))
+                })
 
-                this.socket.onclose = () => {
+                this.socket.on('close', () => {
                     this.emitServiceMessage('Connection closed')
                     this.destroy()
-                }
-            } catch (e) {
-                this.emitServiceMessage(`Failed to connect: ${e}`)
+                })
+            } catch (e: any) {
+                this.emitServiceMessage(`Failed to connect: ${e.message}`)
                 reject(e)
             }
         })
     }
 
-    private handleMessage(data: string | ArrayBuffer | Blob): void {
+    private handleMessage(data: WebSocket.Data): void {
+        let text: string
         if (typeof data === 'string') {
-            this.parseK8sMessage(data)
-        } else if (data instanceof ArrayBuffer) {
-            this.parseK8sMessage(new TextDecoder().decode(data))
-        } else if (data instanceof Blob) {
-            data.text().then((text) => {
-                this.parseK8sMessage(text)
-            })
+            text = data
+        } else if (Buffer.isBuffer(data)) {
+            text = data.toString()
+        } else if (Array.isArray(data)) {
+            text = Buffer.concat(data).toString()
+        } else {
+            // ArrayBuffer
+            text = Buffer.from(data).toString()
         }
+        this.parseK8sMessage(text)
     }
 
     private parseK8sMessage(text: string): void {
