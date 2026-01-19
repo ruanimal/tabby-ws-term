@@ -20,6 +20,7 @@
     "@angular/compiler-cli": "^15.0.0",
     "@ngtools/webpack": "^15.0.0",
     "@types/node": "^18.0.0",
+    "@types/ws": "^8.18.1",
     "ansi-colors": "^4.1.3",
     "apply-loader": "^2.0.0",
     "css-loader": "^6.8.1",
@@ -44,5 +45,8 @@
     "tabby-core": "*",
     "tabby-settings": "*",
     "tabby-terminal": "*"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }
