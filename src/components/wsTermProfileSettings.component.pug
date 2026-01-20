@@ -22,4 +22,11 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                 small.form-text.text-muted(translate)
                     | Command to execute automatically after connection (e.g. bash to switch shell)
 
+            .form-check.mb-3
+                input.form-check-input#confirmDisconnect(
+                    type='checkbox',
+                    [(ngModel)]='profile.options.confirmDisconnect',
+                )
+                label.form-check-label(for='confirmDisconnect', translate) Confirm disconnect
+
 div([ngbNavOutlet]='nav')

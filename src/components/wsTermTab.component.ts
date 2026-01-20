@@ -79,7 +79,7 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     }
 
     async canClose(): Promise<boolean> {
-        if (!this.wsSession?.open) {
+        if (!this.wsSession?.open || this.profile.options.confirmDisconnect === false) {
             return true
         }
         return (await this.platform.showMessageBox(

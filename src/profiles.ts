@@ -7,6 +7,7 @@ import { WSTermTabComponent } from './components/wsTermTab.component'
 export interface WSTermProfileOptions {
     wsUrl: string
     shell?: string
+    confirmDisconnect?: boolean
 }
 
 export interface WSTermProfile extends BaseTerminalProfile {
@@ -23,6 +24,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
         options: {
             wsUrl: '',
             shell: '',
+            confirmDisconnect: true,
         },
     }
 
