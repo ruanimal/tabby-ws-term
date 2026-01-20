@@ -56,11 +56,6 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
             this.attachSessionHandler(session.serviceMessage$, msg => {
                 this.write(`\r${colors.black.bgWhite(' WS-TERM ')} ${msg}\r\n`)
                 session.resize(this.size.columns, this.size.rows)
-                // Clear terminal after "Connected" to hide sensitive connection info (URL may contain tokens)
-                if (msg === 'Connected') {
-                    // Use ANSI escape sequences: clear screen and move cursor to home
-                    this.write('\x1b[2J\x1b[H')
-                }
             })
 
             try {

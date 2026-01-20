@@ -12,4 +12,14 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                 small.form-text.text-muted(translate)
                     | Enter the full WebSocket URL including authentication parameters
 
+            .mb-3
+                label(translate) Startup Command / Shell
+                input.form-control(
+                    type='text',
+                    placeholder='bash, zsh, etc.',
+                    [(ngModel)]='profile.options.shell',
+                )
+                small.form-text.text-muted(translate)
+                    | Command to execute automatically after connection (e.g. bash to switch shell)
+
 div([ngbNavOutlet]='nav')

@@ -6,6 +6,7 @@ import { WSTermTabComponent } from './components/wsTermTab.component'
 
 export interface WSTermProfileOptions {
     wsUrl: string
+    shell?: string
 }
 
 export interface WSTermProfile extends BaseTerminalProfile {
@@ -21,6 +22,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
     configDefaults = {
         options: {
             wsUrl: '',
+            shell: '',
         },
     }
 
@@ -33,6 +35,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
                 icon: 'fas fa-cloud',
                 options: {
                     wsUrl: '',
+                    shell: '',
                 },
                 isBuiltin: true,
                 isTemplate: true,

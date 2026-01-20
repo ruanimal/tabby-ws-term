@@ -56,6 +56,20 @@ export class WSTermSession extends BaseSession {
                     if (this.lastWidth && this.lastHeight) {
                         this.resize(this.lastWidth, this.lastHeight)
                     }
+                    // Clear terminal immediately to hide internal connection messages
+                    this.emitOutput(Buffer.from('\x1b[2J\x1b[H'))
+
+                    if (this.profile.options.shell) {
+                        this.emitServiceMessage(`Executing startup command: ${this.profile.options.shell}`)
+                        this.sendToWebSocket(Buffer.from(this.profile.options.shell + '\r'))
+                        // Use Ctrl+L to force a remote redraw after the shell has started
+                        // This ensures that any echoes from the startup command are wiped
+                        // and the shell redraws its prompt on a clean screen.
+                        setTimeout(() => {
+                            this.sendToWebSocket(Buffer.from('\x0c'))
+                        }, 200)
+                    }
+
                     resolve()
                 })
 
