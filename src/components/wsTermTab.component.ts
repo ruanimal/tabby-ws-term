@@ -110,4 +110,12 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
             return this.profile.options.wsUrl || 'WS Terminal'
         }
     }
+
+    async getRecoveryToken(): Promise<any> {
+        return {
+            type: 'app:ws-term-tab',
+            profile: this.profile,
+            savedState: this.frontend?.saveState(),
+        }
+    }
 }
