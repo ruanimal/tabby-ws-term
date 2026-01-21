@@ -64,7 +64,9 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
 
             this.attachSessionHandler(session.serviceMessage$, msg => {
                 this.write(`\r${colors.black.bgWhite(' WS-TERM ')} ${msg}\r\n`)
-                session.resize(this.size.columns, this.size.rows)
+                if (this.size) {
+                    session.resize(this.size.columns, this.size.rows)
+                }
             })
 
             this.subscribeUntilDestroyed(session.destroyed$, () => this.onSessionDestroyed())
