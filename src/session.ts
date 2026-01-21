@@ -186,11 +186,23 @@ export class WSTermSession extends BaseSession {
 
     async destroy(): Promise<void> {
         this.serviceMessage.complete()
-        this.kill()
+        await this.gracefullyKillProcess()
         await super.destroy()
     }
 
     async gracefullyKillProcess(): Promise<void> {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            const inputMsg: K8sTerminalMessage = {
+                Op: 'stdin',
+                Data: 'exit\r',
+            }
+            try {
+                await new Promise<void>(resolve => {
+                    this.socket?.send(JSON.stringify(inputMsg), (_err) => resolve())
+                    setTimeout(resolve, 1000)
+                })
+            } catch { }
+        }
         this.kill()
     }
 
