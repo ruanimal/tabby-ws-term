@@ -20,6 +20,8 @@ export class WSTermSession extends BaseSession {
     private socket: WebSocket | null = null
     private lastWidth = 0
     private lastHeight = 0
+    public lastCloseCode: number | null = null
+    public lastError: Error | null = null
 
     constructor(
         logger: Logger,
@@ -78,12 +80,14 @@ export class WSTermSession extends BaseSession {
                 })
 
                 this.socket.on('error', (err: Error) => {
+                    this.lastError = err
                     this.emitServiceMessage(`WebSocket error: ${err.message}`)
                     reject(new Error('WebSocket connection failed: ' + err.message))
                 })
 
-                this.socket.on('close', () => {
-                    this.emitServiceMessage('Connection closed')
+                this.socket.on('close', (code: number) => {
+                    this.lastCloseCode = code
+                    this.emitServiceMessage(`Connection closed (code: ${code})`)
                     this.destroy()
                 })
             } catch (e: any) {

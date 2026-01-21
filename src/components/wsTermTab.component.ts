@@ -18,6 +18,7 @@ const tabTemplate = require('./wsTermTab.component.pug')
 export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> {
     @Input() profile: WSTermProfile
     wsSession: WSTermSession | null = null
+    private isReconnecting = false
 
     constructor(
         injector: Injector,
@@ -39,8 +40,16 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     }
 
     protected onSessionDestroyed(): void {
+        if (this.isReconnecting) {
+            return
+        }
         if (this.frontend) {
             this.write('\r\n' + colors.black.bgWhite(' WS-TERM ') + ` session closed\r\n`)
+        }
+
+        const session = this.wsSession
+        if (session && !session.lastError && [1000, 1001, 1006].includes(session.lastCloseCode ?? 0)) {
+            this.destroy()
         }
     }
 
@@ -58,6 +67,8 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
                 session.resize(this.size.columns, this.size.rows)
             })
 
+            this.subscribeUntilDestroyed(session.destroyed$, () => this.onSessionDestroyed())
+
             try {
                 await session.start()
                 this.stopSpinner()
@@ -72,10 +83,12 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     }
 
     async reconnect(): Promise<void> {
+        this.isReconnecting = true
         if (this.wsSession) {
             await this.wsSession.destroy()
         }
         await this.initializeSession()
+        this.isReconnecting = false
     }
 
     async canClose(): Promise<boolean> {
