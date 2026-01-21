@@ -24,7 +24,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
         options: {
             wsUrl: '',
             shell: '',
-            confirmDisconnect: true,
+            confirmDisconnect: false,
         },
     }
 
@@ -86,18 +86,34 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
         }
 
         // Validate URL
+        let url: URL
         try {
-            new URL(wsUrl)
+            url = new URL(wsUrl)
         } catch {
             return null
         }
 
+        const options: WSTermProfileOptions = {
+            wsUrl: url.toString(),
+        }
+
+        const params = new URLSearchParams(url.search)
+        if (params.has('ws-term.option.shell')) {
+            options.shell = params.get('ws-term.option.shell')!
+            params.delete('ws-term.option.shell')
+        }
+        if (params.has('ws-term.option.confirmDisconnect')) {
+            options.confirmDisconnect = params.get('ws-term.option.confirmDisconnect') === 'true'
+            params.delete('ws-term.option.confirmDisconnect')
+        }
+
+        url.search = params.toString()
+        options.wsUrl = url.toString()
+
         return {
             name: query,
             type: 'ws-term',
-            options: {
-                wsUrl,
-            },
+            options,
         }
     }
 
