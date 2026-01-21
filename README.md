@@ -8,3 +8,4 @@
 - 可以通过 cli quickconnect 快速连接 (需要 tabby 放开限制)
 - 可以通过 profile 连接
 - 支持连接时启动命令
+- 文件上传下载（使用 trzsz 插件）

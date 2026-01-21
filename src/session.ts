@@ -143,9 +143,8 @@ export class WSTermSession extends BaseSession {
         this.logger.info(msg)
     }
 
-    // Override feedFromTerminal to bypass middleware and send directly to WebSocket
-    // This prevents any potential duplication from middleware processing
-    feedFromTerminal(data: Buffer): void {
+    // write() is called by BaseSession's middleware subscription
+    write(data: Buffer): void {
         this.sendToWebSocket(data)
     }
 
@@ -176,13 +175,6 @@ export class WSTermSession extends BaseSession {
             this.socket.send(JSON.stringify(resizeMsg))
             this.logger.debug(`Sent resize: ${this.lastWidth}x${this.lastHeight}`)
         }
-    }
-
-    // write() is called by BaseSession's middleware subscription
-    // We make it a no-op since we handle input directly in feedFromTerminal
-    write(data: Buffer): void {
-        // No-op: input is handled directly in feedFromTerminal
-        // This prevents double sending when BaseSession's middleware calls write()
     }
 
     kill(_signal?: string): void {
