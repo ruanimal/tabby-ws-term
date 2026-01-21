@@ -4,10 +4,10 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
         ng-template(ngbNavContent)
             .mb-3
                 label(translate) WebSocket URL
-                input.form-control(
-                    type='text',
+                textarea.form-control(
                     placeholder='wss://your.domain.com/k8sexec?namespace=xxx&pod=xxx...',
                     [(ngModel)]='profile.options.wsUrl',
+                    rows='12',
                 )
                 small.form-text.text-muted(translate)
                     | Enter the full WebSocket URL including authentication parameters
