@@ -22,6 +22,7 @@ export class WSTermSession extends BaseSession {
     private lastHeight = 0
     public lastCloseCode: number | null = null
     public lastError: Error | null = null
+    private keepaliveTimer: NodeJS.Timeout | null = null
 
     constructor(
         logger: Logger,
@@ -71,6 +72,9 @@ export class WSTermSession extends BaseSession {
                             this.sendToWebSocket(Buffer.from('\x0c'))
                         }, 200)
                     }
+
+                    // Start keepalive mechanism
+                    this.startKeepalive()
 
                     resolve()
                 })
@@ -185,6 +189,7 @@ export class WSTermSession extends BaseSession {
     }
 
     async destroy(): Promise<void> {
+        this.stopKeepalive()
         this.serviceMessage.complete()
         await this.gracefullyKillProcess()
         await super.destroy()
@@ -212,5 +217,68 @@ export class WSTermSession extends BaseSession {
 
     async getWorkingDirectory(): Promise<string | null> {
         return null
+    }
+
+    private startKeepalive(): void {
+        this.stopKeepalive()
+
+        const interval = this.profile.options.keepaliveInterval ?? 30000
+        if (interval <= 0) {
+            this.logger.debug('Keepalive disabled')
+            return
+        }
+
+        this.logger.debug(`Starting keepalive with interval ${interval}ms`)
+        this.keepaliveTimer = setInterval(() => {
+            this.sendKeepalive()
+        }, interval)
+    }
+
+    private stopKeepalive(): void {
+        if (this.keepaliveTimer) {
+            clearInterval(this.keepaliveTimer)
+            this.keepaliveTimer = null
+            this.logger.debug('Stopped keepalive')
+        }
+    }
+
+    private sendKeepalive(): void {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            this.logger.debug('Skipping keepalive - socket not open')
+            return
+        }
+
+        // Send resize message as keepalive - more substantial than empty stdin
+        // This is more likely to be recognized as real terminal activity
+        // We re-send the current terminal size, which is harmless
+        if (this.lastWidth && this.lastHeight) {
+            const resizeMsg: K8sTerminalMessage = {
+                Op: 'resize',
+                Cols: this.lastWidth,
+                Rows: this.lastHeight,
+            }
+
+            try {
+                this.socket.send(JSON.stringify(resizeMsg))
+                this.logger.debug(`Sent keepalive (resize ${this.lastWidth}x${this.lastHeight})`)
+            } catch (e: any) {
+                this.logger.error(`Failed to send keepalive: ${e.message}`)
+                // If we can't send, the socket is likely broken
+                // Let the socket error handler deal with it
+            }
+        } else {
+            // Fallback to empty stdin if we don't have size info yet
+            const keepaliveMsg: K8sTerminalMessage = {
+                Op: 'stdin',
+                Data: '',
+            }
+
+            try {
+                this.socket.send(JSON.stringify(keepaliveMsg))
+                this.logger.debug('Sent keepalive (empty stdin - no size available)')
+            } catch (e: any) {
+                this.logger.error(`Failed to send keepalive: ${e.message}`)
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "tabby-ws-term",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "WebSocket terminal connections for K8s web terminals in Tabby",
   "keywords": [
     "tabby-plugin"

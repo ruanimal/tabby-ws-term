@@ -5,9 +5,10 @@
 连接后，可以像使用 tabby 原生tab 一样使用。
 
 # 功能
-- 可以通过 cli quickconnect 快速连接 (需要 tabby 放开限制)
+- 可以通过 CLI 和 URL schema 快速连接 (需要修改 tabby 源码，尝试提交 PR中)
 - 可以通过 profile 连接
 - 支持连接时启动命令
+- 支持连接保持
 - 文件上传下载（使用 trzsz 插件）
     * 不要使用 `-b` 和 `-e` 参数，有兼容性问题
     * 建议设置 `-B 10K` 参数, 提升兼容性，防止上传失败
@@ -24,5 +25,9 @@
 ### 示例
 
 ```bash
+# cli
 tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=bash&ws-term.option.confirmDisconnect=false"
+
+# url schema
+open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod%26ws-term.option.shell%3Dbash%26ws-term.option.confirmDisconnect%3Dfalse"
 ```

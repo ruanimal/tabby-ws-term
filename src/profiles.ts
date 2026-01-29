@@ -8,6 +8,7 @@ export interface WSTermProfileOptions {
     wsUrl: string
     shell?: string
     confirmDisconnect?: boolean
+    keepaliveInterval?: number
 }
 
 export interface WSTermProfile extends BaseTerminalProfile {
@@ -25,6 +26,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
             wsUrl: '',
             shell: '',
             confirmDisconnect: false,
+            keepaliveInterval: 15000,
         },
     }
 
