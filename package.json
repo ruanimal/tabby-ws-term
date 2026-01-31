@@ -1,6 +1,6 @@
 {
   "name": "tabby-ws-term",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "WebSocket terminal connections for K8s web terminals in Tabby",
   "keywords": [
     "tabby-plugin"
@@ -42,9 +42,9 @@
     "@angular/platform-browser": "^15",
     "@ng-bootstrap/ng-bootstrap": "^14",
     "rxjs": "^7",
-    "tabby-core": "*",
-    "tabby-settings": "*",
-    "tabby-terminal": "*"
+    "tabby-core": ">= 1.0.231-nightly.0",
+    "tabby-settings": ">= 1.0.231-nightly.0",
+    "tabby-terminal": ">= 1.0.231-nightly.0"
   },
   "dependencies": {
     "ws": "^8.19.0"

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core'
-import { NewTabParameters, PartialProfile, ProfileProvider } from 'tabby-core'
-import { BaseTerminalProfile } from 'tabby-terminal'
+import { NewTabParameters, PartialProfile, QuickConnectProfileProvider } from 'tabby-core'
+import { ConnectableTerminalProfile } from 'tabby-terminal'
 import { WSTermProfileSettingsComponent } from './components/wsTermProfileSettings.component'
 import { WSTermTabComponent } from './components/wsTermTab.component'
 
@@ -11,15 +11,14 @@ export interface WSTermProfileOptions {
     keepaliveInterval?: number
 }
 
-export interface WSTermProfile extends BaseTerminalProfile {
+export interface WSTermProfile extends ConnectableTerminalProfile {
     options: WSTermProfileOptions
 }
 
 @Injectable({ providedIn: 'root' })
-export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
+export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermProfile> {
     id = 'ws-term'
     name = 'WS Terminal'
-    supportsQuickConnect = true
     settingsComponent = WSTermProfileSettingsComponent
     configDefaults = {
         options: {
@@ -28,6 +27,7 @@ export class WSTermProfilesService extends ProfileProvider<WSTermProfile> {
             confirmDisconnect: false,
             keepaliveInterval: 15000,
         },
+        clearServiceMessagesOnConnect: false,
     }
 
     async getBuiltinProfiles(): Promise<PartialProfile<WSTermProfile>[]> {
