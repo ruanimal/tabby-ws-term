@@ -118,6 +118,5 @@ CMD ["./server"]
 sudo docker build -t fake-kube-exec .
 sudo docker run -it --rm -p 127.0.0.1:8080:8080 fake-kube-exec
 
-/Applications/Tabby.app/Contents/MacOS/Tabby quickConnect ws-term ws://127.0.0.1:8080/ex
-ec
+/Applications/Tabby.app/Contents/MacOS/Tabby quickConnect ws-term ws://127.0.0.1:8080/exec
 ```
