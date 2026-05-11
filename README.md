@@ -7,7 +7,7 @@ A Tabby plugin for connecting to cloud provider K8s Web Terminal (xterm.js) WebS
 Once connected, it functions just like a native Tabby tab.
 
 # Features
-- quick connect via CLI and URL schema (requires change Tabby source code, try to submit PR)
+- quick connect via CLI and URL schema
 - Connection via profiles
 - Supports startup commands upon connection
 - Supports keep-alive
