@@ -5,7 +5,7 @@
 连接后，可以像使用 tabby 原生tab 一样使用。
 
 # 功能
-- 可以通过 CLI 和 URL schema 快速连接 (需要修改 tabby 源码，尝试提交 PR中)
+- 可以通过 CLI 和 URL schema 快速连接
 - 可以通过 profile 连接
 - 支持连接时启动命令
 - 支持连接保持
