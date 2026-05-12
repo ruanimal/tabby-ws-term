@@ -13,6 +13,16 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     | Enter the full WebSocket URL including authentication parameters
 
             .mb-3
+                label(translate) Protocol Type
+                select.form-control(
+                    [(ngModel)]='profile.options.protocol',
+                )
+                    option(value='kube-exec') kube-exec (Kubernetes exec)
+                    option(value='ttyd') ttyd (ttyd WebSocket terminal)
+                small.form-text.text-muted(translate)
+                    | Select the WebSocket protocol format
+
+            .mb-3
                 label(translate) Startup Command / Shell
                 input.form-control(
                     type='text',

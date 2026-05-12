@@ -3,12 +3,15 @@ import { NewTabParameters, PartialProfile, QuickConnectProfileProvider } from 't
 import { ConnectableTerminalProfile } from 'tabby-terminal'
 import { WSTermProfileSettingsComponent } from './components/wsTermProfileSettings.component'
 import { WSTermTabComponent } from './components/wsTermTab.component'
+import { ProtocolType, normalizeProtocolType } from './protocols'
 
 export interface WSTermProfileOptions {
     wsUrl: string
     shell?: string
     confirmDisconnect?: boolean
     keepaliveInterval?: number
+    /** 协议类型，默认为 'kube-exec' */
+    protocol?: ProtocolType
 }
 
 export interface WSTermProfile extends ConnectableTerminalProfile {
@@ -26,6 +29,7 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             shell: '',
             confirmDisconnect: false,
             keepaliveInterval: 15000,
+            protocol: 'kube-exec' as ProtocolType,
         },
         clearServiceMessagesOnConnect: false,
     }
@@ -108,6 +112,11 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             options.confirmDisconnect = params.get('ws-term.option.confirmDisconnect') === 'true'
             params.delete('ws-term.option.confirmDisconnect')
         }
+        if (params.has('ws-term.option.protocol')) {
+            const protocolParam = params.get('ws-term.option.protocol')
+            options.protocol = normalizeProtocolType(protocolParam)
+            params.delete('ws-term.option.protocol')
+        }
 
         url.search = params.toString()
         options.wsUrl = url.toString()
@@ -123,7 +132,24 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
      * Convert a profile back into a quick connect string (the wsUrl)
      */
     intoQuickConnectString(profile: WSTermProfile): string | null {
-        return profile.options?.wsUrl || null
+        if (!profile.options?.wsUrl) {
+            return null
+        }
+
+        // 对于 ttyd 协议，需要在 URL 中包含 protocol 参数
+        if (profile.options.protocol === 'ttyd') {
+            try {
+                const url = new URL(profile.options.wsUrl)
+                const params = new URLSearchParams(url.search)
+                params.set('ws-term.option.protocol', 'ttyd')
+                url.search = params.toString()
+                return url.toString()
+            } catch {
+                return profile.options.wsUrl
+            }
+        }
+
+        return profile.options.wsUrl
     }
 }
 

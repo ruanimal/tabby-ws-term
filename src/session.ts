@@ -4,14 +4,7 @@ import { Subject, Observable } from 'rxjs'
 import WebSocket from 'ws'
 
 import { WSTermProfile } from './profiles'
-
-// K8s WebSocket message types
-interface K8sTerminalMessage {
-    Op: 'stdout' | 'stdin' | 'resize' | 'toast'
-    Data?: string
-    Rows?: number
-    Cols?: number
-}
+import { ProtocolHandler, createProtocolHandler, normalizeProtocolType, TerminalSize, DecodedMessage } from './protocols'
 
 export class WSTermSession extends BaseSession {
     get serviceMessage$(): Observable<string> { return this.serviceMessage }
@@ -23,12 +16,23 @@ export class WSTermSession extends BaseSession {
     public lastCloseCode: number | null = null
     public lastError: Error | null = null
     private keepaliveTimer: NodeJS.Timeout | null = null
+    private protocolHandler: ProtocolHandler
 
     constructor(
         logger: Logger,
         public profile: WSTermProfile,
     ) {
         super(logger)
+        
+        // 规范化协议类型，确保无效值回退到默认值 'kube-exec'
+        // 这处理 undefined、null、空字符串以及非有效协议类型的情况
+        const normalizedProtocol = normalizeProtocolType(profile.options.protocol)
+        this.protocolHandler = createProtocolHandler(normalizedProtocol)
+        
+        // 记录规范化信息（如果原始值无效）
+        if (profile.options.protocol !== normalizedProtocol) {
+            logger.info(`Protocol type normalized from '${profile.options.protocol}' to '${normalizedProtocol}'`)
+        }
     }
 
     async start(): Promise<void> {
@@ -101,44 +105,38 @@ export class WSTermSession extends BaseSession {
         })
     }
 
+    /**
+     * 处理接收到的 WebSocket 消息
+     * 使用协议处理器解码消息
+     */
     private handleMessage(data: WebSocket.Data): void {
-        let text: string
-        if (typeof data === 'string') {
-            text = data
-        } else if (Buffer.isBuffer(data)) {
-            text = data.toString()
-        } else if (Array.isArray(data)) {
-            text = Buffer.concat(data).toString()
-        } else {
-            // ArrayBuffer
-            text = Buffer.from(data).toString()
+        const decodedMessages = this.protocolHandler.decode(data)
+        
+        for (const msg of decodedMessages) {
+            this.processDecodedMessage(msg)
         }
-        this.parseK8sMessage(text)
     }
 
-    private parseK8sMessage(text: string): void {
-        try {
-            const msg: K8sTerminalMessage = JSON.parse(text)
-
-            switch (msg.Op) {
-                case 'stdout':
-                    if (msg.Data) {
-                        this.emitOutput(Buffer.from(msg.Data))
-                    }
-                    break
-                case 'toast':
-                    // Toast messages are notifications from the server
-                    if (msg.Data) {
-                        this.emitServiceMessage(msg.Data)
-                    }
-                    break
-                default:
-                    this.logger.debug('Unhandled message type:', msg.Op)
-            }
-        } catch (e) {
-            // If not JSON, treat as raw output (fallback)
-            this.logger.debug('Non-JSON message received, treating as raw output')
-            this.emitOutput(Buffer.from(text))
+    /**
+     * 处理解码后的消息
+     */
+    private processDecodedMessage(msg: DecodedMessage): void {
+        switch (msg.type) {
+            case 'output':
+                this.emitOutput(msg.data)
+                break
+            case 'title':
+                // 设置窗口标题（未来可实现）
+                this.logger.debug(`Received title: ${msg.data}`)
+                break
+            case 'toast':
+                // Toast 消息作为服务消息显示
+                this.emitServiceMessage(msg.data)
+                break
+            case 'preferences':
+                // 处理偏好设置（未来可实现）
+                this.logger.debug('Received preferences:', msg.data)
+                break
         }
     }
 
@@ -152,31 +150,34 @@ export class WSTermSession extends BaseSession {
         this.sendToWebSocket(data)
     }
 
+    /**
+     * 发送数据到 WebSocket
+     * 使用协议处理器编码输入数据
+     */
     private sendToWebSocket(data: Buffer): void {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            // Send input in K8s format
-            const inputMsg: K8sTerminalMessage = {
-                Op: 'stdin',
-                Data: data.toString(),
-            }
-            this.socket.send(JSON.stringify(inputMsg))
+            const encoded = this.protocolHandler.encodeInput(data)
+            this.socket.send(encoded)
         }
     }
 
+    /**
+     * 调整终端大小
+     * 使用协议处理器编码 resize 消息
+     */
     resize(w: number, h: number): void {
         if (w && h) {
             this.lastWidth = w
             this.lastHeight = h
         }
 
-        // Send resize message in K8s format
         if (this.socket && this.socket.readyState === WebSocket.OPEN && this.lastWidth && this.lastHeight) {
-            const resizeMsg: K8sTerminalMessage = {
-                Op: 'resize',
-                Cols: this.lastWidth,
-                Rows: this.lastHeight,
+            const size: TerminalSize = {
+                columns: this.lastWidth,
+                rows: this.lastHeight,
             }
-            this.socket.send(JSON.stringify(resizeMsg))
+            const encoded = this.protocolHandler.encodeResize(size)
+            this.socket.send(encoded)
             this.logger.debug(`Sent resize: ${this.lastWidth}x${this.lastHeight}`)
         }
     }
@@ -197,13 +198,10 @@ export class WSTermSession extends BaseSession {
 
     async gracefullyKillProcess(): Promise<void> {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            const inputMsg: K8sTerminalMessage = {
-                Op: 'stdin',
-                Data: 'exit\r',
-            }
             try {
+                // 发送 exit 命令
+                this.sendToWebSocket(Buffer.from('exit\r'))
                 await new Promise<void>(resolve => {
-                    this.socket?.send(JSON.stringify(inputMsg), (_err) => resolve())
                     setTimeout(resolve, 1000)
                 })
             } catch { }
@@ -219,6 +217,9 @@ export class WSTermSession extends BaseSession {
         return null
     }
 
+    /**
+     * 启动保活机制
+     */
     private startKeepalive(): void {
         this.stopKeepalive()
 
@@ -234,6 +235,9 @@ export class WSTermSession extends BaseSession {
         }, interval)
     }
 
+    /**
+     * 停止保活机制
+     */
     private stopKeepalive(): void {
         if (this.keepaliveTimer) {
             clearInterval(this.keepaliveTimer)
@@ -242,42 +246,31 @@ export class WSTermSession extends BaseSession {
         }
     }
 
+    /**
+     * 发送保活消息
+     * 使用协议处理器编码保活消息
+     */
     private sendKeepalive(): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             this.logger.debug('Skipping keepalive - socket not open')
             return
         }
 
-        // Send resize message as keepalive - more substantial than empty stdin
-        // This is more likely to be recognized as real terminal activity
-        // We re-send the current terminal size, which is harmless
+        // 如果有终端尺寸信息，发送保活消息
         if (this.lastWidth && this.lastHeight) {
-            const resizeMsg: K8sTerminalMessage = {
-                Op: 'resize',
-                Cols: this.lastWidth,
-                Rows: this.lastHeight,
+            const size: TerminalSize = {
+                columns: this.lastWidth,
+                rows: this.lastHeight,
             }
 
             try {
-                this.socket.send(JSON.stringify(resizeMsg))
-                this.logger.debug(`Sent keepalive (resize ${this.lastWidth}x${this.lastHeight})`)
+                const encoded = this.protocolHandler.encodeKeepalive(size)
+                this.socket.send(encoded)
+                this.logger.debug(`Sent keepalive (${this.protocolHandler.protocolType}: ${this.lastWidth}x${this.lastHeight})`)
             } catch (e: any) {
                 this.logger.error(`Failed to send keepalive: ${e.message}`)
-                // If we can't send, the socket is likely broken
-                // Let the socket error handler deal with it
-            }
-        } else {
-            // Fallback to empty stdin if we don't have size info yet
-            const keepaliveMsg: K8sTerminalMessage = {
-                Op: 'stdin',
-                Data: '',
-            }
-
-            try {
-                this.socket.send(JSON.stringify(keepaliveMsg))
-                this.logger.debug('Sent keepalive (empty stdin - no size available)')
-            } catch (e: any) {
-                this.logger.error(`Failed to send keepalive: ${e.message}`)
+                // 如果发送失败，socket 可能已断开
+                // 让 socket 错误处理器处理后续逻辑
             }
         }
     }
