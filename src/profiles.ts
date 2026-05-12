@@ -35,7 +35,7 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             {
                 id: `ws-term:template`,
                 type: 'ws-term',
-                name: 'K8s Web Terminal',
+                name: 'WebSocket Terminal',
                 icon: 'fas fa-cloud',
                 options: {
                     wsUrl: '',
