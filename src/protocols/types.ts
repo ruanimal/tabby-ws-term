@@ -56,6 +56,16 @@ export interface PreferencesMessage {
 export type DecodedMessage = OutputMessage | TitleMessage | ToastMessage | PreferencesMessage
 
 /**
+ * ttyd 连接初始消息接口
+ * 建立 WebSocket 连接后，客户端须先发送此二进制 JSON 消息进行握手。
+ */
+export interface TtydConnectMessage {
+    AuthToken: string
+    columns: number
+    rows: number
+}
+
+/**
  * ttyd 协议的消息类型前缀
  */
 export const TTYD_PREFIX = {

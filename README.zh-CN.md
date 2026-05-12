@@ -1,8 +1,11 @@
 # Tabby WS Term
 
-一个 tabby 插件，用于连接 云厂商 k8s 的 web terminal （xterm.js） 的 ws shell 连接.
+一个 Tabby 插件，用于连接 WebSocket 终端会话，支持多种协议：
 
-连接后，可以像使用 tabby 原生tab 一样使用。
+- **kube-exec**：Kubernetes `kubectl exec` 风格的 WebSocket 连接（默认）
+- **ttyd**：[ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接
+
+连接后，可以像使用 Tabby 原生 tab 一样使用。
 
 # 功能
 - 可以通过 CLI 和 URL schema 快速连接
@@ -12,6 +15,24 @@
 - 文件上传下载（使用 trzsz 插件）
     * 不要使用 `-b` 和 `-e` 参数，有兼容性问题
     * 建议设置 `-B 10K` 参数, 提升兼容性，防止上传失败
+
+## 支持的协议
+
+### kube-exec（默认）
+用于 Kubernetes `kubectl exec` 风格的 WebSocket 连接。这是默认协议。
+
+### ttyd
+用于 [ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接。
+
+使用 ttyd 协议时，在 URL 参数中添加 `ws-term.option.protocol=ttyd`：
+
+```bash
+# cli
+tabby quickConnect ws-term 'ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd'
+
+# url schema
+open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2F127.0.0.1%3A7681%2Fws%3Fws-term.option.protocol%3Dttyd"
+```
 
 ## Quick Connect 参数
 

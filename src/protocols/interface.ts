@@ -16,6 +16,13 @@ export interface ProtocolHandler {
     readonly protocolType: ProtocolType
 
     /**
+     * 获取 WebSocket 子协议列表
+     * 某些协议（如 ttyd）要求在 WebSocket 握手时指定子协议
+     * @returns 子协议数组，如果不指定则返回空数组
+     */
+    getSubprotocols?(): string[]
+
+    /**
      * 编码用户输入数据
      * @param data 用户输入的原始数据
      * @returns 编码后可发送的消息
@@ -35,6 +42,14 @@ export interface ProtocolHandler {
      * @returns 编码后的保活消息
      */
     encodeKeepalive(size: TerminalSize): string | Buffer
+
+    /**
+     * 编码连接初始消息
+     * 在 WebSocket 连接建立后，需要先发送此消息进行握手/认证。
+     * @param size 终端尺寸
+     * @returns 编码后的连接消息，或 null（如果协议不需要初始握手）
+     */
+    encodeConnect(size: TerminalSize): Buffer | null
 
     /**
      * 解码服务器消息

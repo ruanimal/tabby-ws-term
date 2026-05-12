@@ -23,12 +23,12 @@ export class WSTermSession extends BaseSession {
         public profile: WSTermProfile,
     ) {
         super(logger)
-        
+
         // 规范化协议类型，确保无效值回退到默认值 'kube-exec'
         // 这处理 undefined、null、空字符串以及非有效协议类型的情况
         const normalizedProtocol = normalizeProtocolType(profile.options.protocol)
         this.protocolHandler = createProtocolHandler(normalizedProtocol)
-        
+
         // 记录规范化信息（如果原始值无效）
         if (profile.options.protocol !== normalizedProtocol) {
             logger.info(`Protocol type normalized from '${profile.options.protocol}' to '${normalizedProtocol}'`)
@@ -46,7 +46,9 @@ export class WSTermSession extends BaseSession {
                 const origin = `https://${url.host}`
 
                 // Create WebSocket with custom headers for better compatibility
-                this.socket = new WebSocket(wsUrl, {
+                // Get subprotocols from handler (e.g., ttyd requires 'tty')
+                const subprotocols = this.protocolHandler.getSubprotocols?.() ?? []
+                this.socket = new WebSocket(wsUrl, subprotocols, {
                     headers: {
                         'Origin': origin,
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
@@ -59,7 +61,17 @@ export class WSTermSession extends BaseSession {
                 this.socket.on('open', () => {
                     this.emitServiceMessage('Connected')
                     this.open = true
-                    // Send initial resize if we have size info
+
+                    // Send protocol-specific connect/init message (e.g. ttyd auth handshake)
+                    const connectMsg = this.protocolHandler.encodeConnect(
+                        { columns: 80, rows: 24 },
+                    )
+                    if (connectMsg) {
+                        this.socket.send(connectMsg)
+                        this.logger.debug(`Sent connect message (${this.protocolHandler.protocolType})`)
+                    }
+
+                    // Send initial resize
                     if (this.lastWidth && this.lastHeight) {
                         this.resize(this.lastWidth, this.lastHeight)
                     }
@@ -111,7 +123,7 @@ export class WSTermSession extends BaseSession {
      */
     private handleMessage(data: WebSocket.Data): void {
         const decodedMessages = this.protocolHandler.decode(data)
-        
+
         for (const msg of decodedMessages) {
             this.processDecodedMessage(msg)
         }

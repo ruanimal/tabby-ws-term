@@ -4,11 +4,11 @@
  */
 
 import { ProtocolHandler } from './interface'
-import { TerminalSize, DecodedMessage, TTYD_PREFIX, ProtocolType } from './types'
+import { TerminalSize, DecodedMessage, TTYD_PREFIX, ProtocolType, TtydConnectMessage } from './types'
 
 /**
  * ttyd 协议处理器
- * 
+ *
  * ttyd 协议使用简单的文本前缀来区分消息类型：
  * - 输入消息：'0' + 数据内容
  * - 调整大小：'1' + JSON{columns, rows}
@@ -18,6 +18,30 @@ import { TerminalSize, DecodedMessage, TTYD_PREFIX, ProtocolType } from './types
  */
 export class TtydHandler implements ProtocolHandler {
     readonly protocolType: ProtocolType = 'ttyd'
+
+    /**
+     * ttyd 要求使用 'tty' 子协议
+     */
+    getSubprotocols(): string[] {
+        return ['tty']
+    }
+
+    /**
+     * 编码连接初始消息
+     * ttyd 要求在 WebSocket 连接建立后，客户端先发送一个二进制帧，
+     * 内容为 JSON 格式的认证和终端尺寸信息。
+     * @param size 终端尺寸
+     * @param authToken 认证令牌（默认空字符串）
+     * @returns 包含 JSON 的 Buffer
+     */
+    encodeConnect(size: TerminalSize): Buffer {
+        const msg: TtydConnectMessage = {
+            AuthToken: "",
+            columns: size.columns,
+            rows: size.rows,
+        }
+        return Buffer.from(JSON.stringify(msg))
+    }
 
     /**
      * 编码用户输入数据
@@ -58,7 +82,7 @@ export class TtydHandler implements ProtocolHandler {
      */
     decode(message: unknown): DecodedMessage[] {
         const text = this.dataToString(message)
-        
+
         if (text.length === 0) {
             return []
         }
@@ -70,11 +94,11 @@ export class TtydHandler implements ProtocolHandler {
             case TTYD_PREFIX.OUTPUT:
                 // '0' 前缀：终端输出
                 return [{ type: 'output', data: Buffer.from(payload) }]
-            
+
             case TTYD_PREFIX.SET_TITLE:
                 // '1' 前缀：设置窗口标题
                 return [{ type: 'title', data: payload }]
-            
+
             case TTYD_PREFIX.SET_PREFERENCES:
                 // '2' 前缀：设置偏好
                 try {
@@ -84,7 +108,7 @@ export class TtydHandler implements ProtocolHandler {
                     // JSON 解析失败，忽略此消息
                     return []
                 }
-            
+
             default:
                 // 未知前缀，忽略消息
                 return []
@@ -101,16 +125,23 @@ export class TtydHandler implements ProtocolHandler {
             return data
         }
         if (Buffer.isBuffer(data)) {
-            return data.toString()
+            return data.toString('utf8')
         }
         if (Array.isArray(data)) {
             // Buffer 数组，合并后转换
-            return Buffer.concat(data).toString()
+            return Buffer.concat(data).toString('utf8')
         }
         if (data instanceof ArrayBuffer) {
-            return Buffer.from(data).toString()
+            return Buffer.from(data).toString('utf8')
         }
-        // 其他情况（如 DataView、TypedArray），返回空字符串
+        // 其他情况（如 DataView、TypedArray），尝试转换
+        if (data && typeof data === 'object' && 'buffer' in data) {
+            // 可能是 TypedArray (Uint8Array 等)
+            const typedArray = data as Uint8Array
+            if (typedArray.buffer instanceof ArrayBuffer) {
+                return Buffer.from(typedArray.buffer).toString('utf8')
+            }
+        }
         return ''
     }
 }

@@ -11,6 +11,27 @@ import { KUBE_EXEC_OP } from '../types'
 describe('KubeExecHandler', () => {
     const handler = new KubeExecHandler()
 
+    describe('encodeConnect', () => {
+        it('should return null for kube-exec protocol', () => {
+            expect(handler.encodeConnect({ columns: 80, rows: 24 })).toBeNull()
+        })
+
+        it('should return null regardless of size', () => {
+            const sizes = [
+                { columns: 0, rows: 0 },
+                { columns: 9999, rows: 9999 },
+                { columns: 80, rows: 24 },
+            ]
+            for (const size of sizes) {
+                expect(handler.encodeConnect(size)).toBeNull()
+            }
+        })
+
+        it('should return null regardless of authToken', () => {
+            expect(handler.encodeConnect({ columns: 80, rows: 24 }, 'any-token')).toBeNull()
+        })
+    })
+
     describe('Property 2: kube-exec 输入编码正确性', () => {
         /**
          * Property 2: 对于任意用户输入数据，KubeExecHandler.encodeInput SHALL 返回有效的 JSON 字符串，

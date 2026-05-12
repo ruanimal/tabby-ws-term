@@ -21,7 +21,10 @@
     "exclude": [
         "node_modules",
         "dist",
-        "tabby.link"
+        "tabby.link",
+        "src/**/*.spec.ts",
+        "src/**/__tests__/",
+        "vitest.config.ts"
     ],
     "angularCompilerOptions": {
         "enableIvy": true,

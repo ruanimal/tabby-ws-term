@@ -2,7 +2,10 @@
 
 [中文](README.zh-CN.md)
 
-A Tabby plugin for connecting to cloud provider K8s Web Terminal (xterm.js) WebSocket shell sessions.
+A Tabby plugin for connecting to WebSocket terminal sessions, supporting multiple protocols:
+
+- **kube-exec**: Kubernetes `kubectl exec` style WebSocket connections (default)
+- **ttyd**: [ttyd](https://github.com/tsl0922/ttyd) WebSocket terminal connections
 
 Once connected, it functions just like a native Tabby tab.
 
@@ -14,6 +17,24 @@ Once connected, it functions just like a native Tabby tab.
 - File upload and download (using `trzsz` plugin)
     * Do not use `-b` and `-e` parameters due to compatibility issues
     * Recommends setting `-B 10K` parameter to improve compatibility and prevent upload failures
+
+## Supported Protocols
+
+### kube-exec (default)
+For Kubernetes `kubectl exec` style WebSocket connections. This is the default protocol.
+
+### ttyd
+For [ttyd](https://github.com/tsl0922/ttyd) WebSocket terminal connections.
+
+To use ttyd protocol, add `ws-term.option.protocol=ttyd` to the URL parameters:
+
+```bash
+# cli
+tabby quickConnect ws-term 'ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd'
+
+# url schema
+open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2F127.0.0.1%3A7681%2Fws%3Fws-term.option.protocol%3Dttyd"
+```
 
 ## Quick Connect Parameters
 

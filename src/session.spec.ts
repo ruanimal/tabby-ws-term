@@ -326,6 +326,28 @@ describe('会话层协议处理器集成测试', () => {
                 expect(decoded).toHaveLength(0)
             }
         })
+
+        it('encodeConnect 返回包含 AuthToken 和尺寸的二进制消息', () => {
+            const handler = createProtocolHandler('ttyd')
+
+            const size = { columns: 127, rows: 32 }
+            const result = handler.encodeConnect(size, '')
+
+            // 必须是 Buffer
+            expect(result).toBeInstanceOf(Buffer)
+            // 解析 JSON 内容
+            const parsed = JSON.parse((result as Buffer).toString())
+            expect(parsed.AuthToken).toBe('')
+            expect(parsed.columns).toBe(127)
+            expect(parsed.rows).toBe(32)
+        })
+
+        it('kube-exec encodeConnect 返回 null', () => {
+            const handler = createProtocolHandler('kube-exec')
+
+            const result = handler.encodeConnect({ columns: 80, rows: 24 })
+            expect(result).toBeNull()
+        })
     })
 
     describe('协议处理器的行为一致性', () => {

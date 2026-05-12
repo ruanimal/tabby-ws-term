@@ -18,7 +18,7 @@ interface KubeExecMessage {
 
 /**
  * kube-exec 协议处理器
- * 
+ *
  * 用于处理 Kubernetes exec 协议的 WebSocket 消息格式。
  * 消息格式为 JSON，包含 Op 字段标识操作类型。
  */
@@ -26,9 +26,18 @@ export class KubeExecHandler implements ProtocolHandler {
     readonly protocolType: ProtocolType = 'kube-exec'
 
     /**
+     * 编码连接初始消息
+     * kube-exec 协议不需要初始握手
+     * @returns null
+     */
+    encodeConnect(_size: TerminalSize): Buffer | null {
+        return null
+    }
+
+    /**
      * 编码用户输入数据
      * 生成 `{"Op":"stdin","Data":"..."}` 格式的 JSON 消息
-     * 
+     *
      * @param data 用户输入的原始数据
      * @returns 编码后的 JSON 字符串
      */
@@ -43,7 +52,7 @@ export class KubeExecHandler implements ProtocolHandler {
     /**
      * 编码终端大小调整消息
      * 生成 `{"Op":"resize","Cols":N,"Rows":N}` 格式的 JSON 消息
-     * 
+     *
      * @param size 终端尺寸
      * @returns 编码后的 JSON 字符串
      */
@@ -59,7 +68,7 @@ export class KubeExecHandler implements ProtocolHandler {
     /**
      * 编码保活消息
      * kube-exec 协议使用 resize 消息作为保活
-     * 
+     *
      * @param size 当前终端尺寸
      * @returns 编码后的保活消息
      */
@@ -70,7 +79,7 @@ export class KubeExecHandler implements ProtocolHandler {
     /**
      * 解码服务器消息
      * 解析 stdout 和 toast 消息，处理非 JSON 消息降级
-     * 
+     *
      * @param message 从 WebSocket 接收的原始消息
      * @returns 解码后的消息数组
      */
@@ -106,7 +115,7 @@ export class KubeExecHandler implements ProtocolHandler {
 
     /**
      * 将各种格式的 WebSocket 数据转换为字符串
-     * 
+     *
      * @param data WebSocket 数据
      * @returns 字符串形式的数据
      */

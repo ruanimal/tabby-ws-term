@@ -12,6 +12,40 @@ describe('TtydHandler', () => {
     const handler = new TtydHandler()
 
     describe('Unit Tests', () => {
+        describe('encodeConnect', () => {
+            it('should return a Buffer', () => {
+                const size: TerminalSize = { columns: 127, rows: 32 }
+                const result = handler.encodeConnect(size)
+                expect(result).toBeInstanceOf(Buffer)
+            })
+
+            it('should contain valid JSON with AuthToken, columns, rows', () => {
+                const size: TerminalSize = { columns: 120, rows: 40 }
+                const result = handler.encodeConnect(size)
+                const parsed = JSON.parse(result.toString())
+                expect(parsed).toHaveProperty('AuthToken')
+                expect(parsed).toHaveProperty('columns')
+                expect(parsed).toHaveProperty('rows')
+                expect(parsed.columns).toBe(120)
+                expect(parsed.rows).toBe(40)
+                expect(parsed.AuthToken).toBe('')
+            })
+
+            it('should use provided authToken', () => {
+                const size: TerminalSize = { columns: 80, rows: 24 }
+                const result = handler.encodeConnect(size, 'my-token')
+                const parsed = JSON.parse(result.toString())
+                expect(parsed.AuthToken).toBe('my-token')
+            })
+
+            it('should use empty authToken by default', () => {
+                const size: TerminalSize = { columns: 80, rows: 24 }
+                const result = handler.encodeConnect(size)
+                const parsed = JSON.parse(result.toString())
+                expect(parsed.AuthToken).toBe('')
+            })
+        })
+
         describe('encodeResize', () => {
             it('should return string starting with "1" prefix', () => {
                 const size: TerminalSize = { columns: 80, rows: 24 }
@@ -53,6 +87,51 @@ describe('TtydHandler', () => {
     })
 
     describe('Property-Based Tests', () => {
+        /**
+         * Property: ttyd encodeConnect 正确性
+         * 
+         * 对于任意有效的终端尺寸和 authToken，
+         * TtydHandler.encodeConnect SHALL 返回一个 Buffer，
+         * 内容为包含 AuthToken、columns、rows 字段的有效 JSON。
+         */
+        describe('Property: ttyd encodeConnect correctness', () => {
+            const terminalSizeArbitrary = fc.record({
+                columns: fc.integer({ min: 1, max: 9999 }),
+                rows: fc.integer({ min: 1, max: 9999 }),
+            })
+
+            it('encodeConnect should return a Buffer for any size', () => {
+                fc.assert(
+                    fc.property(terminalSizeArbitrary, (size: TerminalSize) => {
+                        const result = handler.encodeConnect(size)
+                        return Buffer.isBuffer(result)
+                    }),
+                    { numRuns: 100 }
+                )
+            })
+
+            it('encodeConnect should contain valid JSON', () => {
+                fc.assert(
+                    fc.property(
+                        terminalSizeArbitrary,
+                        fc.string({ maxLength: 100 }),
+                        (size, token) => {
+                            const result = handler.encodeConnect(size, token)
+                            try {
+                                const parsed = JSON.parse(result.toString())
+                                return parsed.AuthToken === token
+                                    && parsed.columns === size.columns
+                                    && parsed.rows === size.rows
+                            } catch {
+                                return false
+                            }
+                        }
+                    ),
+                    { numRuns: 100 }
+                )
+            })
+        })
+
         /**
          * Property 6: ttyd 输入编码正确性
          * 
