@@ -1,3 +1,5 @@
+# 无法支持 zmodem 的原因
+ 
 经过详细的调试和分析，结论是：Tabby-ws-term 目前无法支持 rz/sz (Zmodem)，因为后端 WebSocket 协议破坏了二进制数据的完整性。
 
 ## 详细原因

@@ -9,48 +9,47 @@ A Tabby plugin for connecting to WebSocket terminal sessions, supporting multipl
 
 Once connected, it functions just like a native Tabby tab.
 
-# Features
-- quick connect via CLI and URL schema
+## Features
+
+- Quick connect via CLI and URL schema
 - Connection via profiles
-- Supports startup commands upon connection
-- Supports keep-alive
-- File upload and download (using `trzsz` plugin)
-    * Do not use `-b` and `-e` parameters due to compatibility issues
-    * Recommends setting `-B 10K` parameter to improve compatibility and prevent upload failures
+- Startup commands upon connection
+- Keep-alive support
+- File upload and download (via `trzsz` plugin)
+  - Avoid using `-b` and `-e` parameters (compatibility issues)
+  - Recommend setting `-B 10K` to improve compatibility and prevent upload failures
 
 ## Supported Protocols
 
-### kube-exec (default)
-For Kubernetes `kubectl exec` style WebSocket connections. This is the default protocol.
-
-### ttyd
-For [ttyd](https://github.com/tsl0922/ttyd) WebSocket terminal connections.
-
-To use ttyd protocol, add `ws-term.option.protocol=ttyd` to the URL parameters:
-
-```bash
-# cli
-tabby quickConnect ws-term 'ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd'
-
-# url schema
-open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2F127.0.0.1%3A7681%2Fws%3Fws-term.option.protocol%3Dttyd"
-```
+| Protocol | Description |
+|----------|-------------|
+| `kube-exec` | Kubernetes `kubectl exec` style WebSocket connections (default) |
+| `ttyd` | [ttyd](https://github.com/tsl0922/ttyd) WebSocket terminal connections |
 
 ## Quick Connect Parameters
 
-When using CLI `quickConnect` or browser Deep Links, extra Profile configurations can be passed through URL parameters in the WebSocket URL. These parameters are automatically extracted and removed from the original URL upon connection.
+When using CLI `quickConnect` or URL schema, extra options can be passed via URL parameters. These parameters are automatically extracted and removed from the WebSocket URL upon connection.
 
-Supported parameters:
+### Parameters
 
-- `ws-term.option.shell`: Specifies the shell command to execute after connecting.
-- `ws-term.option.confirmDisconnect`: Whether to display a confirmation dialog when disconnecting (`true`/`false`).
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `ws-term.option.protocol` | Connection protocol (`kube-exec` or `ttyd`) | `kube-exec` |
+| `ws-term.option.shell` | Shell command to execute after connecting | Server-defined |
+| `ws-term.option.confirmDisconnect` | Show confirmation dialog on disconnect (`true`/`false`) | `true` |
 
-### Example
+### Examples
 
 ```bash
-# cli
+# CLI - kube-exec (default)
+tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod"
+
+# CLI - ttyd protocol
+tabby quickConnect ws-term "ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd"
+
+# CLI - with custom shell and disable confirm dialog
 tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=bash&ws-term.option.confirmDisconnect=false"
 
-# url schema
-open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod%26ws-term.option.shell%3Dbash%26ws-term.option.confirmDisconnect%3Dfalse"
+# URL schema
+open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod"
 ```

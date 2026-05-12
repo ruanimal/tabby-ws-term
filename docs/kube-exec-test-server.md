@@ -1,4 +1,4 @@
-# WebSocket Terminal Test Server
+# kube-exec WebSocket Terminal Test Server
 
 ## Dockerfile
 

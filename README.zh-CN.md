@@ -5,50 +5,49 @@
 - **kube-exec**：Kubernetes `kubectl exec` 风格的 WebSocket 连接（默认）
 - **ttyd**：[ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接
 
-连接后，可以像使用 Tabby 原生 tab 一样使用。
+连接后，可以像使用 Tabby 原生标签页一样使用。
 
-# 功能
-- 可以通过 CLI 和 URL schema 快速连接
-- 可以通过 profile 连接
-- 支持连接时启动命令
+## 功能特性
+
+- 支持 CLI 和 URL scheme 快速连接
+- 支持通过 Profile 连接
+- 支持连接时执行启动命令
 - 支持连接保持
-- 文件上传下载（使用 trzsz 插件）
-    * 不要使用 `-b` 和 `-e` 参数，有兼容性问题
-    * 建议设置 `-B 10K` 参数, 提升兼容性，防止上传失败
+- 支持文件上传下载（通过 `trzsz` 插件）
+  - 不要使用 `-b` 和 `-e` 参数（存在兼容性问题）
+  - 建议设置 `-B 10K` 以提升兼容性，防止上传失败
 
 ## 支持的协议
 
-### kube-exec（默认）
-用于 Kubernetes `kubectl exec` 风格的 WebSocket 连接。这是默认协议。
+| 协议 | 说明 |
+|------|------|
+| `kube-exec` | Kubernetes `kubectl exec` 风格的 WebSocket 连接（默认） |
+| `ttyd` | [ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接 |
 
-### ttyd
-用于 [ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接。
+## 快速连接参数
 
-使用 ttyd 协议时，在 URL 参数中添加 `ws-term.option.protocol=ttyd`：
+使用 CLI `quickConnect` 或 URL scheme 时，可以通过 URL 参数传递额外选项。这些参数在连接时会自动从 WebSocket URL 中提取并移除。
 
-```bash
-# cli
-tabby quickConnect ws-term 'ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd'
+### 参数说明
 
-# url schema
-open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2F127.0.0.1%3A7681%2Fws%3Fws-term.option.protocol%3Dttyd"
-```
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `ws-term.option.protocol` | 连接协议（`kube-exec` 或 `ttyd`） | `kube-exec` |
+| `ws-term.option.shell` | 连接后执行的 shell 命令 | 服务端定义 |
+| `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `true` |
 
-## Quick Connect 参数
-
-使用 CLI `quickConnect` 或浏览器 Deep Link 时，可以在 WebSocket URL 中通过 URL 参数传递额外的 Profile 配置，这些参数在连接时会被自动提取并从原始 URL 中移除。
-
-支持的参数：
-
-- `ws-term.option.shell`: 指定连接后执行的 shell 命令。
-- `ws-term.option.confirmDisconnect`: 是否在断开连接时显示确认弹窗 (`true`/`false`)。
-
-### 示例
+### 使用示例
 
 ```bash
-# cli
+# CLI - kube-exec（默认）
+tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod"
+
+# CLI - ttyd 协议
+tabby quickConnect ws-term "ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd"
+
+# CLI - 自定义 shell 并禁用确认弹窗
 tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=bash&ws-term.option.confirmDisconnect=false"
 
-# url schema
-open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod%26ws-term.option.shell%3Dbash%26ws-term.option.confirmDisconnect%3Dfalse"
+# URL scheme
+open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod"
 ```
