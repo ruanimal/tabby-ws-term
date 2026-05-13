@@ -20,10 +20,13 @@ export class TtydHandler implements ProtocolHandler {
     readonly protocolType: ProtocolType = 'ttyd'
 
     /**
+     * 获取 WebSocket 连接选项
      * ttyd 要求使用 'tty' 子协议
      */
-    getSubprotocols(): string[] {
-        return ['tty']
+    getWebSocketOptions(_url: string): import('./interface').WebSocketConnectOptions {
+        return {
+            subprotocols: ['tty'],
+        }
     }
 
     /**

@@ -42,19 +42,21 @@ export class WSTermSession extends BaseSession {
         return new Promise((resolve, reject) => {
             try {
                 // Parse the URL to get the origin
-                const url = new URL(wsUrl)
-                const origin = `https://${url.host}`
+                const parsedUrl = new URL(wsUrl)
+                const origin = `https://${parsedUrl.host}`
+
+                // Get WebSocket options from protocol handler
+                const wsOptions = this.protocolHandler.getWebSocketOptions?.(wsUrl) ?? {}
 
                 // Create WebSocket with custom headers for better compatibility
-                // Get subprotocols from handler (e.g., ttyd requires 'tty')
-                const subprotocols = this.protocolHandler.getSubprotocols?.() ?? []
-                this.socket = new WebSocket(wsUrl, subprotocols, {
+                this.socket = new WebSocket(wsUrl, wsOptions.subprotocols ?? [], {
                     headers: {
                         'Origin': origin,
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
                         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                         'Cache-Control': 'no-cache',
                         'Pragma': 'no-cache',
+                        ...wsOptions.headers,
                     },
                 })
 

@@ -6,6 +6,18 @@
 import { TerminalSize, DecodedMessage, ProtocolType } from './types'
 
 /**
+ * WebSocket 连接选项
+ */
+export interface WebSocketConnectOptions {
+    /** 子协议列表 */
+    subprotocols?: string[]
+    /** 自定义请求头 */
+    headers?: Record<string, string>
+    /** 其他 WebSocket 客户端选项 */
+    [key: string]: unknown
+}
+
+/**
  * 协议处理器接口
  * 所有协议处理器必须实现此接口
  */
@@ -16,11 +28,12 @@ export interface ProtocolHandler {
     readonly protocolType: ProtocolType
 
     /**
-     * 获取 WebSocket 子协议列表
-     * 某些协议（如 ttyd）要求在 WebSocket 握手时指定子协议
-     * @returns 子协议数组，如果不指定则返回空数组
+     * 获取 WebSocket 连接选项
+     * 包括子协议、请求头等连接参数
+     * @param url WebSocket URL
+     * @returns WebSocket 连接选项
      */
-    getSubprotocols?(): string[]
+    getWebSocketOptions?(url: string): WebSocketConnectOptions
 
     /**
      * 编码用户输入数据
