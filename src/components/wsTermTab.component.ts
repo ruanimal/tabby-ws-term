@@ -43,8 +43,12 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
         if (this.isReconnecting) {
             return
         }
-        if (this.frontend) {
-            this.write('\r\n' + colors.black.bgWhite(' WS-TERM ') + ` session closed\r\n`)
+        try {
+            if (this.frontend) {
+                this.write('\r\n' + colors.black.bgWhite(' WS-TERM ') + ` session closed\r\n`)
+            }
+        } catch {
+            // Frontend not ready, ignore
         }
 
         const session = this.wsSession
@@ -63,7 +67,11 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
             this.startSpinner(this.translate.instant('Connecting'))
 
             this.attachSessionHandler(session.serviceMessage$, msg => {
-                this.write(`\r${colors.black.bgWhite(' WS-TERM ')} ${msg}\r\n`)
+                try {
+                    this.write(`\r${colors.black.bgWhite(' WS-TERM ')} ${msg}\r\n`)
+                } catch {
+                    // Frontend not ready, ignore
+                }
                 if (this.size) {
                     session.resize(this.size.columns, this.size.rows)
                 }
@@ -76,11 +84,19 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
                 this.stopSpinner()
             } catch (e: any) {
                 this.stopSpinner()
-                this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+                try {
+                    this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+                } catch {
+                    // Frontend not ready, ignore
+                }
                 return
             }
         } catch (e: any) {
-            this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+            try {
+                this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+            } catch {
+                // Frontend not ready, ignore
+            }
         }
     }
 

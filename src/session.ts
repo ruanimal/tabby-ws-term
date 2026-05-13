@@ -17,6 +17,7 @@ export class WSTermSession extends BaseSession {
     public lastError: Error | null = null
     private keepaliveTimer: NodeJS.Timeout | null = null
     private protocolHandler: ProtocolHandler
+    private isDestroyed = false
 
     constructor(
         logger: Logger,
@@ -109,8 +110,10 @@ export class WSTermSession extends BaseSession {
 
                 this.socket.on('close', (code: number) => {
                     this.lastCloseCode = code
-                    this.emitServiceMessage(`Connection closed (code: ${code})`)
-                    this.destroy()
+                    if (!this.isDestroyed) {
+                        this.emitServiceMessage(`Connection closed (code: ${code})`)
+                        this.destroy()
+                    }
                 })
             } catch (e: any) {
                 this.emitServiceMessage(`Failed to connect: ${e.message}`)
@@ -135,6 +138,11 @@ export class WSTermSession extends BaseSession {
      * 处理解码后的消息
      */
     private processDecodedMessage(msg: DecodedMessage): void {
+        // NOTE: 如果 session 已销毁，忽略消息
+        if (this.isDestroyed) {
+            return
+        }
+
         switch (msg.type) {
             case 'output':
                 this.emitOutput(msg.data)
@@ -204,6 +212,10 @@ export class WSTermSession extends BaseSession {
     }
 
     async destroy(): Promise<void> {
+        if (this.isDestroyed) {
+            return
+        }
+        this.isDestroyed = true
         this.stopKeepalive()
         this.serviceMessage.complete()
         await this.gracefullyKillProcess()
