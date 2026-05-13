@@ -37,9 +37,9 @@ export class TtydHandler implements ProtocolHandler {
      * @param authToken 认证令牌（默认空字符串）
      * @returns 包含 JSON 的 Buffer
      */
-    encodeConnect(size: TerminalSize): Buffer {
+    encodeConnect(size: TerminalSize, authToken: string = ''): Buffer {
         const msg: TtydConnectMessage = {
-            AuthToken: "",
+            AuthToken: authToken,
             columns: size.columns,
             rows: size.rows,
         }
