@@ -4,7 +4,7 @@ import { Subject, Observable } from 'rxjs'
 import WebSocket from 'ws'
 
 import { WSTermProfile } from './profiles'
-import { ProtocolHandler, createProtocolHandler, normalizeProtocolType, TerminalSize, DecodedMessage } from './protocols'
+import { ProtocolHandler, createProtocolHandler, normalizeProtocolType, TerminalSize, DecodedMessage, WebSocketConnectOptions } from './protocols'
 
 export class WSTermSession extends BaseSession {
     get serviceMessage$(): Observable<string> { return this.serviceMessage }
@@ -52,13 +52,34 @@ export class WSTermSession extends BaseSession {
     }
 
     async start(): Promise<void> {
-        const wsUrl = this.profile.options.wsUrl
+        let wsUrl = this.profile.options.wsUrl
+        let sessionWsOptions: WebSocketConnectOptions | undefined
+
+        // 如果协议处理器支持 createSession，先调用它创建 session
+        if (this.protocolHandler.createSession) {
+            this.emitServiceMessage('Creating exec session...')
+            try {
+                const result = await this.protocolHandler.createSession(wsUrl, {
+                    allowInsecure: this.profile.options.allowInsecure,
+                })
+                wsUrl = result.wsUrl
+                sessionWsOptions = result.wsOptions
+                this.logger.info(`Exec session created: ${result.sessionId}`)
+                this.emitServiceMessage(`Session created: ${result.sessionId}`)
+            } catch (e: any) {
+                this.logger.error(`Failed to create exec session: ${e.message}`)
+                this.emitServiceMessage(`Failed to create session: ${e.message}`)
+                throw new Error(`Failed to create exec session: ${e.message}`)
+            }
+        }
+
         this.emitServiceMessage(`Connecting to ${wsUrl}`)
 
         return new Promise((resolve, reject) => {
             try {
                 // Get WebSocket options from protocol handler (includes auth headers)
-                const wsOptions = this.protocolHandler.getWebSocketOptions?.(wsUrl) ?? {}
+                // 优先使用 createSession 返回的 wsOptions，否则从 wsUrl 获取
+                const wsOptions = sessionWsOptions ?? this.protocolHandler.getWebSocketOptions?.(wsUrl) ?? {}
 
                 // Build default headers
                 const defaultHeaders: Record<string, string> = {
@@ -77,6 +98,7 @@ export class WSTermSession extends BaseSession {
                 }
 
                 // Create WebSocket with custom headers for better compatibility
+                this.logger.info(`Connecting to WebSocket: ${wsUrl}`)
                 this.socket = new WebSocket(wsUrl, wsOptions.subprotocols ?? [], {
                     headers: {
                         ...defaultHeaders,

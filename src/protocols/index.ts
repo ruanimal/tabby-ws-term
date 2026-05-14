@@ -37,24 +37,23 @@ const handlerClasses = [
  * 遍历所有 handler，找到第一个能处理该 URL 的 handler。
  * 
  * @param protocolType 协议类型（可选）
- * @param wsUrl WebSocket URL（用于自动识别协议类型和 K8sDashboardHandler 提取 SessionID）
+ * @param wsUrl WebSocket URL（用于自动识别协议类型）
  * @returns 对应的协议处理器实例
  * @throws {Error} 当协议类型未知时抛出错误
  */
 export function createProtocolHandler(protocolType?: ProtocolType, wsUrl?: string): ProtocolHandler {
     // 如果指定了有效的协议类型，直接创建对应的处理器
     if (protocolType && isValidProtocolType(protocolType)) {
-        return createHandlerByType(protocolType, wsUrl)
+        return createHandlerByType(protocolType)
     }
 
     // 未指定协议类型或协议类型无效，根据 URL 自动识别
     if (wsUrl) {
         // 遍历所有 handler，找到第一个能处理该 URL 的 handler
         for (const HandlerClass of handlerClasses) {
-            // 创建临时实例用于检测
-            const tempHandler = new HandlerClass(wsUrl)
-            if (tempHandler.canHandle(wsUrl)) {
-                return tempHandler
+            const handler = new HandlerClass()
+            if (handler.canHandle(wsUrl)) {
+                return handler
             }
         }
     }
@@ -66,17 +65,16 @@ export function createProtocolHandler(protocolType?: ProtocolType, wsUrl?: strin
 /**
  * 根据协议类型创建处理器实例
  * @param protocolType 协议类型
- * @param wsUrl WebSocket URL（可选，用于 K8sDashboardHandler 提取 SessionID）
  * @returns 对应的协议处理器实例
  */
-function createHandlerByType(protocolType: ProtocolType, wsUrl?: string): ProtocolHandler {
+function createHandlerByType(protocolType: ProtocolType): ProtocolHandler {
     switch (protocolType) {
         case 'kube-exec':
             return new KubeExecHandler()
         case 'ttyd':
             return new TtydHandler()
         case 'k8s-dashboard':
-            return new K8sDashboardHandler(wsUrl)
+            return new K8sDashboardHandler()
         default:
             // 类型保护，确保处理所有可能的值
             const _exhaustiveCheck: never = protocolType
@@ -103,36 +101,4 @@ export function normalizeProtocolType(value: unknown): ProtocolType {
         return value
     }
     return 'kube-exec'
-}
-
-/**
- * 检查 URL 是否为 K8s Dashboard WebSocket URL
- * @param url WebSocket URL
- * @returns 是否为 K8s Dashboard 协议的 URL
- *
- * 检测规则：
- * 1. URL 路径包含 "/api/sockjs/" 或 "/sockjs/"
- * 2. URL 查询参数名称匹配 32 位十六进制格式
- * 
- * @deprecated 请使用 K8sDashboardHandler.canHandle(url) 代替
- */
-export function isK8sDashboardUrl(url: string): boolean {
-    const handler = new K8sDashboardHandler()
-    return handler.canHandle(url)
-}
-
-/**
- * 根据 URL 特征自动检测协议类型
- * @param wsUrl WebSocket URL
- * @returns 检测到的协议类型，默认返回 'kube-exec'
- *
- * 检测逻辑：
- * - 如果 URL 匹配 K8s Dashboard 特征，返回 'k8s-dashboard'
- * - 否则返回默认协议类型 'kube-exec'
- * 
- * @deprecated 请使用 createProtocolHandler(undefined, wsUrl) 代替
- */
-export function detectProtocolType(wsUrl: string): ProtocolType {
-    const handler = createProtocolHandler(undefined, wsUrl)
-    return handler.protocolType
 }
