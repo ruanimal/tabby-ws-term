@@ -3,8 +3,18 @@
  * @module protocols/k8s-dashboard.handler
  */
 
-import { ProtocolHandler, WebSocketConnectOptions } from './interface'
+import { ProtocolHandler, WebSocketConnectOptions, SessionCreateResult, SessionCreateOptions } from './interface'
 import { TerminalSize, DecodedMessage, K8S_DASHBOARD_OP, ProtocolType } from './types'
+
+/**
+ * K8s Dashboard URL 中的 pod 信息
+ */
+interface PodInfo {
+    namespace: string
+    pod: string
+    container?: string
+    shell?: string
+}
 
 /**
  * K8s Dashboard 协议处理器
@@ -15,45 +25,30 @@ import { TerminalSize, DecodedMessage, K8S_DASHBOARD_OP, ProtocolType } from './
  * - 心跳消息：单字符 "h"，每 25 秒发送一次
  * - 数据消息：以 "a" 前缀开头，后跟 JSON 数组
  * - 需要发送 bind 消息进行会话绑定
+ *
+ * 使用方式：URL 中需要包含 pod 和 namespace 参数，例如：
+ * wss://dashboard.example.com?pod=my-pod&namespace=default&container=main&shell=bash
  */
 export class K8sDashboardHandler implements ProtocolHandler {
     readonly protocolType: ProtocolType = 'k8s-dashboard'
 
     /**
-     * 从 URL 提取的会话 ID
+     * 会话 ID（通过 createSession 方法创建后设置）
      */
-    private sessionId: string
+    private sessionId = ''
 
     /**
      * 当前终端尺寸，用于编码 stdin 消息
      */
     private terminalSize: TerminalSize
 
-    /**
-     * 是否已收到连接打开消息（"o" 消息）
-     * K8s Dashboard 协议需要等待 "o" 消息后才能发送 bind
-     */
-    private hasReceivedOpenMessage = false
-
-    /**
-     * 待发送的 bind 消息（在收到 "o" 消息后发送）
-     */
-    private pendingBindMessage: Buffer | null = null
-
-    /**
-     * 构造函数
-     * @param wsUrl WebSocket URL，用于提取 SessionID
-     */
-    constructor(wsUrl?: string) {
-        this.sessionId = wsUrl ? this.extractSessionId(wsUrl) : ''
+    constructor() {
         this.terminalSize = { columns: 80, rows: 24 }
     }
 
     /**
      * 判断是否能处理给定的 URL
-     * K8s Dashboard URL 的特征：
-     * 1. URL 路径包含 "/api/sockjs/" 或 "/sockjs/"
-     * 2. URL 查询参数名称匹配 32 位十六进制格式
+     * K8s Dashboard URL 的特征：URL 包含 pod 和 namespace 查询参数
      *
      * @param url WebSocket URL
      * @returns 是否为 K8s Dashboard 协议的 URL
@@ -61,28 +56,204 @@ export class K8sDashboardHandler implements ProtocolHandler {
     canHandle(url: string): boolean {
         try {
             const parsedUrl = new URL(url)
-
-            // 规则 1: 检查路径是否包含 "/api/sockjs/" 或 "/sockjs/"
-            const path = parsedUrl.pathname
-            if (path.includes('/api/sockjs/') || path.includes('/sockjs/')) {
-                return true
-            }
-
-            // 规则 2: 检查查询参数名称是否匹配 32 位十六进制格式
-            // SessionID 作为查询参数名出现，如 ?<session_id>=xxx
-            // 而不是作为查询参数值
-            const searchParams = parsedUrl.searchParams
-            const paramNames = Array.from(searchParams.keys())
-            for (const paramName of paramNames) {
-                if (/^[a-f0-9]{32}$/.test(paramName)) {
-                    return true
-                }
-            }
-
-            return false
+            const params = parsedUrl.searchParams
+            const pod = params.get('pod')
+            const namespace = params.get('namespace') || params.get('ns')
+            return !!(pod && namespace)
         } catch {
-            // URL 解析失败，返回 false
             return false
+        }
+    }
+
+    /**
+     * 创建 exec session
+     * 调用 K8s Dashboard API 创建 exec session，获取 SessionID
+     *
+     * @param url 原始 URL（包含 pod 信息）
+     * @param options 创建选项
+     * @returns 包含 WebSocket URL 和 SessionID 的结果
+     */
+    async createSession(url: string, options?: SessionCreateOptions): Promise<SessionCreateResult> {
+        // 从 URL 中提取 pod 信息
+        const podInfo = this.extractPodInfo(url)
+        if (!podInfo) {
+            throw new Error('无法从 URL 中提取 pod 信息，请确保 URL 包含 pod 和 namespace 参数')
+        }
+
+        // 构建 Dashboard API URL
+        const urlObj = new URL(url)
+        // 将 WebSocket 协议转换为 HTTP 协议
+        const httpProtocol = urlObj.protocol === 'wss:' ? 'https:' : 'http:'
+        const baseUrl = `${httpProtocol}//${urlObj.host}`
+        const containerPath = podInfo.container ? `/${podInfo.container}` : ''
+        let apiUrl = `${baseUrl}/api/v1/pod/${podInfo.namespace}/${podInfo.pod}/shell${containerPath}`
+
+        // 添加 shell 参数
+        if (podInfo.shell) {
+            apiUrl += `?shell=${encodeURIComponent(podInfo.shell)}`
+        }
+
+        console.log('[ws-term] createSession apiUrl:', apiUrl)
+        console.log('[ws-term] createSession podInfo:', podInfo)
+
+        // 调用 Dashboard API 创建 exec session
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        }
+
+        // 从 URL 中提取认证信息
+        const jweToken = urlObj.searchParams.get('jweToken')
+        const username = urlObj.searchParams.get('username')
+        const authMode = urlObj.searchParams.get('authMode')
+
+        // HTTP API 使用 Authorization 头认证
+        if (jweToken) {
+            headers['Authorization'] = `Bearer ${jweToken}`
+        }
+
+        // 同时设置 Cookie（某些版本可能需要）
+        const cookieParts: string[] = []
+        if (authMode) {
+            cookieParts.push(`authMode=${authMode}`)
+        }
+        if (username) {
+            cookieParts.push(`username=${username}`)
+        }
+        if (jweToken) {
+            cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
+        }
+        if (cookieParts.length > 0) {
+            headers.Cookie = cookieParts.join('; ')
+        }
+
+        console.log('[ws-term] createSession headers:', headers)
+
+        // 发送请求创建 exec session
+        const response = await this.httpGet(apiUrl, headers, options?.allowInsecure)
+
+        console.log('[ws-term] createSession response status:', response.status)
+
+        if (!response.ok) {
+            throw new Error(`创建 exec session 失败: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json() as { id: string }
+        if (!data.id) {
+            throw new Error('创建 exec session 失败: 响应中没有 session ID')
+        }
+
+        // 更新 sessionId
+        this.sessionId = data.id
+
+        // 构建包含 SessionID 的 WebSocket URL
+        // 根据 HAR 文件分析，WebSocket URL 格式为：
+        // wss://host/api/sockjs/{server_id}/{session_id}/websocket?{session_id}
+        // 认证信息通过 Cookie 头传递，不在 URL 中
+
+        // 生成随机的 SockJS server_id 和 session_id
+        const serverId = Math.floor(Math.random() * 1000).toString()
+        const sessionIdShort = Math.random().toString(36).substring(2, 11)
+
+        // 构建完整的 WebSocket URL（只包含 SessionID）
+        const protocol = urlObj.protocol
+        const host = urlObj.host
+        const wsUrl = `${protocol}//${host}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
+
+        // 构建 WebSocket 连接选项（包含认证 headers）
+        const origin = `${protocol === 'wss:' ? 'https' : 'http'}://${host}`
+        const wsOptions: WebSocketConnectOptions = {
+            headers: {
+                Origin: origin,
+                ...(headers.Cookie ? { Cookie: headers.Cookie } : {}),
+            },
+        }
+
+        console.log('[ws-term] createSession result wsUrl:', wsUrl)
+
+        return {
+            wsUrl,
+            sessionId: data.id,
+            wsOptions,
+        }
+    }
+
+    /**
+     * 发送 HTTP GET 请求
+     * 当 allowInsecure 为 true 时，跳过证书验证
+     *
+     * @param url 请求 URL
+     * @param headers 请求头
+     * @param allowInsecure 是否允许自签名证书
+     * @returns Response 对象
+     */
+    private async httpGet(url: string, headers: Record<string, string>, allowInsecure?: boolean): Promise<Response> {
+        if (!allowInsecure) {
+            return fetch(url, { method: 'GET', headers })
+        }
+
+        // 使用 Node.js https 模块，跳过证书验证
+        const https = await import('node:https')
+        const { URL: URLParser } = await import('node:url')
+
+        return new Promise((resolve, reject) => {
+            const parsedUrl = new URLParser(url)
+            const options = {
+                hostname: parsedUrl.hostname,
+                port: parsedUrl.port,
+                path: parsedUrl.pathname + parsedUrl.search,
+                method: 'GET',
+                headers,
+                rejectUnauthorized: false,
+            }
+
+            const req = https.request(options, (res) => {
+                const chunks: Buffer[] = []
+                res.on('data', (chunk: Buffer) => chunks.push(chunk))
+                res.on('end', () => {
+                    const body = Buffer.concat(chunks).toString()
+                    const response = new Response(body, {
+                        status: res.statusCode,
+                        statusText: res.statusMessage,
+                        headers: Object.fromEntries(
+                            Object.entries(res.headers).filter(([, v]) => v !== undefined).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : v!])
+                        ),
+                    })
+                    resolve(response)
+                })
+            })
+
+            req.on('error', reject)
+            req.end()
+        })
+    }
+
+    /**
+     * 从 URL 中提取 pod 信息
+     *
+     * @param url URL 字符串
+     * @returns pod 信息，如果提取失败则返回 null
+     */
+    private extractPodInfo(url: string): PodInfo | null {
+        try {
+            const urlObj = new URL(url)
+            const params = urlObj.searchParams
+
+            const pod = params.get('pod')
+            const namespace = params.get('namespace') || params.get('ns')
+
+            if (!pod || !namespace) {
+                return null
+            }
+
+            return {
+                pod,
+                namespace,
+                container: params.get('container') || undefined,
+                shell: params.get('shell') || undefined,
+            }
+        } catch {
+            return null
         }
     }
 
@@ -112,7 +283,7 @@ export class K8sDashboardHandler implements ProtocolHandler {
             cookieParts.push(`username=${username}`)
         }
         if (jweToken) {
-            cookieParts.push(`jweToken=${jweToken}`)
+            cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
         }
 
         // 构建 Origin 头（从 URL 提取协议和主机）
@@ -127,6 +298,8 @@ export class K8sDashboardHandler implements ProtocolHandler {
         if (cookieParts.length > 0) {
             headers.Cookie = cookieParts.join('; ')
         }
+
+        console.log('[ws-term] getWebSocketOptions headers:', headers)
 
         return { headers }
     }
@@ -265,29 +438,6 @@ export class K8sDashboardHandler implements ProtocolHandler {
             // 异常情况返回空数组
             return []
         }
-    }
-
-    /**
-     * 从 URL 查询参数名称中提取 SessionID
-     * SessionID 是一个 32 位十六进制字符串。
-     *
-     * @param url WebSocket URL
-     * @returns 32 位十六进制 SessionID，如果不存在则返回空字符串
-     */
-    private extractSessionId(url: string): string {
-        try {
-            const urlObj = new URL(url)
-            // 遍历查询参数名称，查找 32 位十六进制格式的参数名
-            const paramNames = Array.from(urlObj.searchParams.keys())
-            for (const paramName of paramNames) {
-                if (/^[a-f0-9]{32}$/.test(paramName)) {
-                    return paramName
-                }
-            }
-        } catch {
-            // URL 解析失败，返回空字符串
-        }
-        return ''
     }
 
     /**
