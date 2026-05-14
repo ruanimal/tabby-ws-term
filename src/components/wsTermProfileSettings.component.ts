@@ -20,7 +20,7 @@ export class WSTermProfileSettingsComponent implements ProfileSettingsComponent<
 
         // 验证 protocol 字段值
         if (protocol !== undefined && !isValidProtocolType(protocol)) {
-            throw new Error(`Invalid protocol type: "${protocol}". Must be "kube-exec" or "ttyd".`)
+            throw new Error(`Invalid protocol type: "${protocol}". Must be "kube-exec", "ttyd", or "k8s-dashboard".`)
         }
     }
 }

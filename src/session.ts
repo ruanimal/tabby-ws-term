@@ -18,6 +18,11 @@ export class WSTermSession extends BaseSession {
     private keepaliveTimer: NodeJS.Timeout | null = null
     private protocolHandler: ProtocolHandler
     private isDestroyed = false
+    /**
+     * 是否已收到连接打开消息（用于 K8s Dashboard 协议）
+     * K8s Dashboard 协议需要等待 "o" 消息后才能发送 bind 和 resize
+     */
+    private receivedOpenMessage = false
 
     constructor(
         logger: Logger,
@@ -25,14 +30,24 @@ export class WSTermSession extends BaseSession {
     ) {
         super(logger)
 
-        // 规范化协议类型，确保无效值回退到默认值 'kube-exec'
-        // 这处理 undefined、null、空字符串以及非有效协议类型的情况
-        const normalizedProtocol = normalizeProtocolType(profile.options.protocol)
-        this.protocolHandler = createProtocolHandler(normalizedProtocol)
+        const wsUrl = profile.options.wsUrl
 
-        // 记录规范化信息（如果原始值无效）
-        if (profile.options.protocol !== normalizedProtocol) {
-            logger.info(`Protocol type normalized from '${profile.options.protocol}' to '${normalizedProtocol}'`)
+        // 创建协议处理器：
+        // 1. 如果用户指定了有效的协议类型，使用用户指定的
+        // 2. 如果用户未指定或指定无效，根据 URL 自动识别
+        if (profile.options.protocol && normalizeProtocolType(profile.options.protocol) === profile.options.protocol) {
+            // 用户指定了有效的协议类型
+            this.protocolHandler = createProtocolHandler(profile.options.protocol, wsUrl)
+            logger.info(`Using specified protocol type: ${profile.options.protocol}`)
+        } else {
+            // 用户未指定或指定无效，自动识别
+            this.protocolHandler = createProtocolHandler(undefined, wsUrl)
+            const detectedType = this.protocolHandler.protocolType
+            if (profile.options.protocol !== undefined) {
+                logger.info(`Invalid protocol type '${profile.options.protocol}', auto-detected as '${detectedType}'`)
+            } else {
+                logger.info(`Protocol type auto-detected as '${detectedType}'`)
+            }
         }
     }
 
@@ -42,54 +57,42 @@ export class WSTermSession extends BaseSession {
 
         return new Promise((resolve, reject) => {
             try {
-                // Parse the URL to get the origin
-                const parsedUrl = new URL(wsUrl)
-                const origin = `https://${parsedUrl.host}`
-
-                // Get WebSocket options from protocol handler
+                // Get WebSocket options from protocol handler (includes auth headers)
                 const wsOptions = this.protocolHandler.getWebSocketOptions?.(wsUrl) ?? {}
+
+                // Build default headers
+                const defaultHeaders: Record<string, string> = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                }
+
+                // If protocol handler didn't set Origin, set a default one
+                if (!wsOptions.headers?.Origin) {
+                    const parsedUrl = new URL(wsUrl)
+                    // Convert ws:// to http:// and wss:// to https://
+                    const protocol = parsedUrl.protocol === 'wss:' ? 'https' : 'http'
+                    defaultHeaders.Origin = `${protocol}://${parsedUrl.host}`
+                }
 
                 // Create WebSocket with custom headers for better compatibility
                 this.socket = new WebSocket(wsUrl, wsOptions.subprotocols ?? [], {
                     headers: {
-                        'Origin': origin,
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
+                        ...defaultHeaders,
                         ...wsOptions.headers,
                     },
+                    rejectUnauthorized: !this.profile.options.allowInsecure,
                 })
 
                 this.socket.on('open', () => {
                     this.emitServiceMessage('Connected')
                     this.open = true
 
-                    // Send protocol-specific connect/init message (e.g. ttyd auth handshake)
-                    const connectMsg = this.protocolHandler.encodeConnect(
-                        { columns: 80, rows: 24 },
-                    )
-                    if (connectMsg) {
-                        this.socket.send(connectMsg)
-                        this.logger.debug(`Sent connect message (${this.protocolHandler.protocolType})`)
-                    }
-
-                    // Send initial resize
-                    if (this.lastWidth && this.lastHeight) {
-                        this.resize(this.lastWidth, this.lastHeight)
-                    }
-                    // Clear terminal immediately to hide internal connection messages
-                    this.emitOutput(Buffer.from('\x1b[2J\x1b[H'))
-
-                    if (this.profile.options.shell) {
-                        this.emitServiceMessage(`Executing startup command: ${this.profile.options.shell}`)
-                        this.sendToWebSocket(Buffer.from(this.profile.options.shell + '\r'))
-                        // Use Ctrl+L to force a remote redraw after the shell has started
-                        // This ensures that any echoes from the startup command are wiped
-                        // and the shell redraws its prompt on a clean screen.
-                        setTimeout(() => {
-                            this.sendToWebSocket(Buffer.from('\x0c'))
-                        }, 200)
+                    // 对于 K8s Dashboard 协议，需要等待 "o" 消息后才能发送初始化消息
+                    // 其他协议在连接建立后立即发送初始化消息
+                    if (this.protocolHandler.protocolType !== 'k8s-dashboard') {
+                        this.sendInitialMessages()
                     }
 
                     // Start keepalive mechanism
@@ -144,6 +147,15 @@ export class WSTermSession extends BaseSession {
         }
 
         switch (msg.type) {
+            case 'open':
+                // K8s Dashboard 协议的连接打开消息
+                // 收到 "o" 消息后，发送初始化消息（bind 和 resize）
+                if (!this.receivedOpenMessage) {
+                    this.receivedOpenMessage = true
+                    this.logger.debug('Received open message, sending initial messages')
+                    this.sendInitialMessages()
+                }
+                break
             case 'output':
                 this.emitOutput(msg.data)
                 break
@@ -159,6 +171,46 @@ export class WSTermSession extends BaseSession {
                 // 处理偏好设置（未来可实现）
                 this.logger.debug('Received preferences:', msg.data)
                 break
+        }
+    }
+
+    /**
+     * 发送初始化消息
+     * 在连接建立后（或收到 "o" 消息后）发送 bind 和 resize 消息
+     */
+    private sendInitialMessages(): void {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            this.logger.debug('Skipping initial messages - socket not open')
+            return
+        }
+
+        // Send protocol-specific connect/init message (e.g. ttyd auth handshake, k8s-dashboard bind)
+        const connectMsg = this.protocolHandler.encodeConnect(
+            { columns: 80, rows: 24 },
+        )
+        if (connectMsg) {
+            this.socket.send(connectMsg)
+            this.logger.debug(`Sent connect message (${this.protocolHandler.protocolType})`)
+        }
+
+        // Send initial resize
+        if (this.lastWidth && this.lastHeight) {
+            this.resize(this.lastWidth, this.lastHeight)
+        }
+
+        // Clear terminal immediately to hide internal connection messages
+        this.emitOutput(Buffer.from('\x1b[2J\x1b[H'))
+
+        // Execute startup command if specified
+        if (this.profile.options.shell) {
+            this.emitServiceMessage(`Executing startup command: ${this.profile.options.shell}`)
+            this.sendToWebSocket(Buffer.from(this.profile.options.shell + '\r'))
+            // Use Ctrl+L to force a remote redraw after the shell has started
+            // This ensures that any echoes from the startup command are wiped
+            // and the shell redraws its prompt on a clean screen.
+            setTimeout(() => {
+                this.sendToWebSocket(Buffer.from('\x0c'))
+            }, 200)
         }
     }
 

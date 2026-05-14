@@ -28,6 +28,14 @@ export interface ProtocolHandler {
     readonly protocolType: ProtocolType
 
     /**
+     * 判断该处理器是否能处理给定的 URL
+     * 每个 Handler 最清楚自己能处理什么样的 URL
+     * @param url WebSocket URL
+     * @returns 是否能处理该 URL
+     */
+    canHandle(url: string): boolean
+
+    /**
      * 获取 WebSocket 连接选项
      * 包括子协议、请求头等连接参数
      * @param url WebSocket URL
