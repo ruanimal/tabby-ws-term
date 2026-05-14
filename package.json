@@ -33,6 +33,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^18.0.0",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "4.1.5",
     "@vitest/ui": "^4.1.5",
     "ansi-colors": "^4.1.3",
     "apply-loader": "^2.0.0",

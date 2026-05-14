@@ -12,6 +12,8 @@ export interface WSTermProfileOptions {
     keepaliveInterval?: number
     /** 协议类型，默认为 'kube-exec' */
     protocol?: ProtocolType
+    /** 是否允许自签名证书（跳过证书验证），默认为 false */
+    allowInsecure?: boolean
 }
 
 export interface WSTermProfile extends ConnectableTerminalProfile {
@@ -30,6 +32,7 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             confirmDisconnect: false,
             keepaliveInterval: 15000,
             protocol: 'kube-exec' as ProtocolType,
+            allowInsecure: false,
         },
         clearServiceMessagesOnConnect: false,
     }
@@ -116,6 +119,10 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             const protocolParam = params.get('ws-term.option.protocol')
             options.protocol = normalizeProtocolType(protocolParam)
             params.delete('ws-term.option.protocol')
+        }
+        if (params.has('ws-term.option.allowInsecure')) {
+            options.allowInsecure = params.get('ws-term.option.allowInsecure') === 'true'
+            params.delete('ws-term.option.allowInsecure')
         }
 
         url.search = params.toString()

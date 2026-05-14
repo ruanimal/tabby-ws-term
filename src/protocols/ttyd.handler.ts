@@ -20,6 +20,20 @@ export class TtydHandler implements ProtocolHandler {
     readonly protocolType: ProtocolType = 'ttyd'
 
     /**
+     * 判断是否能处理给定的 URL
+     * ttyd 协议没有特定的 URL 特征，目前不自动识别
+     * 需要用户手动指定使用 ttyd 协议
+     *
+     * @param _url WebSocket URL
+     * @returns 总是返回 false（不自动识别）
+     */
+    canHandle(_url: string): boolean {
+        // ttyd 协议目前没有特定的 URL 特征可以识别
+        // 需要用户手动指定使用 ttyd 协议
+        return false
+    }
+
+    /**
      * 获取 WebSocket 连接选项
      * ttyd 要求使用 'tty' 子协议
      */

@@ -19,8 +19,9 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                 )
                     option(value='kube-exec') kube-exec (Kubernetes exec)
                     option(value='ttyd') ttyd (ttyd WebSocket terminal)
+                    option(value='k8s-dashboard') k8s-dashboard (Kubernetes Dashboard)
                 small.form-text.text-muted(translate)
-                    | Select the WebSocket protocol format
+                    | Select the WebSocket protocol format. Leave unset for auto-detection.
 
             .mb-3
                 label(translate) Startup Command / Shell
@@ -39,6 +40,15 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     [(ngModel)]='profile.options.confirmDisconnect',
                 )
                 label.form-check-label(for='confirmDisconnect', translate) Confirm disconnect
+
+            .form-check.mb-3
+                input.form-check-input#allowInsecure(
+                    type='checkbox',
+                    [(ngModel)]='profile.options.allowInsecure',
+                )
+                label.form-check-label(for='allowInsecure', translate) Allow insecure connections
+                small.form-text.text-muted.d-block(translate)
+                    | Allow self-signed certificates (not recommended for production)
 
             .mb-3
                 label(translate) Keep Alive Interval (ms)
