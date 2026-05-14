@@ -86,6 +86,7 @@ export class WSTermSession extends BaseSession {
                 })
 
                 this.socket.on('open', () => {
+                    this.debugLog('!!', 'open')
                     this.emitServiceMessage('Connected')
                     this.open = true
 
@@ -102,16 +103,20 @@ export class WSTermSession extends BaseSession {
                 })
 
                 this.socket.on('message', (data: WebSocket.Data) => {
+                    const raw = Buffer.isBuffer(data) ? data : Buffer.from(data as string)
+                    this.debugLog('<<', 'message', raw)
                     this.handleMessage(data)
                 })
 
                 this.socket.on('error', (err: Error) => {
+                    this.debugLog('!!', 'error', err.message)
                     this.lastError = err
                     this.emitServiceMessage(`WebSocket error: ${err.message}`)
                     reject(new Error('WebSocket connection failed: ' + err.message))
                 })
 
                 this.socket.on('close', (code: number) => {
+                    this.debugLog('!!', 'close', `code=${code}`)
                     this.lastCloseCode = code
                     if (!this.isDestroyed) {
                         this.emitServiceMessage(`Connection closed (code: ${code})`)
@@ -189,6 +194,7 @@ export class WSTermSession extends BaseSession {
             { columns: 80, rows: 24 },
         )
         if (connectMsg) {
+            this.debugLog('>>', 'connect', connectMsg)
             this.socket.send(connectMsg)
             this.logger.debug(`Sent connect message (${this.protocolHandler.protocolType})`)
         }
@@ -214,6 +220,20 @@ export class WSTermSession extends BaseSession {
         }
     }
 
+    private debugLog(direction: '<<' | '>>' | '!!', event: string, payload?: unknown): void {
+        const prefix = `[WS-DEBUG] ${direction} ${event}`
+        if (payload === undefined) {
+            this.logger.debug(prefix)
+        } else if (Buffer.isBuffer(payload)) {
+            this.logger.debug(`${prefix} (${payload.length} bytes): ${payload.toString('hex')}`)
+        } else if (typeof payload === 'string') {
+            const display = payload.length > 200 ? payload.slice(0, 200) + '…' : payload
+            this.logger.debug(`${prefix}: ${display}`)
+        } else {
+            this.logger.debug(`${prefix}:`, payload)
+        }
+    }
+
     emitServiceMessage(msg: string): void {
         this.serviceMessage.next(msg)
         this.logger.info(msg)
@@ -231,6 +251,7 @@ export class WSTermSession extends BaseSession {
     private sendToWebSocket(data: Buffer): void {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             const encoded = this.protocolHandler.encodeInput(data)
+            this.debugLog('>>', 'send', encoded)
             this.socket.send(encoded)
         }
     }
@@ -251,6 +272,7 @@ export class WSTermSession extends BaseSession {
                 rows: this.lastHeight,
             }
             const encoded = this.protocolHandler.encodeResize(size)
+            this.debugLog('>>', 'resize', encoded)
             this.socket.send(encoded)
             this.logger.debug(`Sent resize: ${this.lastWidth}x${this.lastHeight}`)
         }
@@ -343,6 +365,7 @@ export class WSTermSession extends BaseSession {
 
             try {
                 const encoded = this.protocolHandler.encodeKeepalive(size)
+                this.debugLog('>>', 'keepalive', encoded)
                 this.socket.send(encoded)
                 this.logger.debug(`Sent keepalive (${this.protocolHandler.protocolType}: ${this.lastWidth}x${this.lastHeight})`)
             } catch (e: any) {
