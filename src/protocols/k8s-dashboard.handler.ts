@@ -29,7 +29,7 @@ interface PodInfo {
  * 使用方式：URL 中需要包含 pod 和 namespace 参数，例如：
  * wss://dashboard.example.com?pod=my-pod&namespace=default&container=main&shell=bash
  */
-export class K8sDashboardHandler implements ProtocolHandler {
+export class K8sDashboardHandler extends ProtocolHandler {
     readonly protocolType: ProtocolType = 'k8s-dashboard'
 
     /**
@@ -43,26 +43,8 @@ export class K8sDashboardHandler implements ProtocolHandler {
     private terminalSize: TerminalSize
 
     constructor() {
+        super()
         this.terminalSize = { columns: 80, rows: 24 }
-    }
-
-    /**
-     * 判断是否能处理给定的 URL
-     * K8s Dashboard URL 的特征：URL 包含 pod 和 namespace 查询参数
-     *
-     * @param url WebSocket URL
-     * @returns 是否为 K8s Dashboard 协议的 URL
-     */
-    canHandle(url: string): boolean {
-        try {
-            const parsedUrl = new URL(url)
-            const params = parsedUrl.searchParams
-            const pod = params.get('pod')
-            const namespace = params.get('namespace') || params.get('ns')
-            return !!(pod && namespace)
-        } catch {
-            return false
-        }
     }
 
     /**
@@ -344,17 +326,6 @@ export class K8sDashboardHandler implements ProtocolHandler {
     }
 
     /**
-     * 编码保活消息
-     * K8s Dashboard 协议使用 resize 消息作为保活
-     *
-     * @param size 当前终端尺寸
-     * @returns 编码后的保活消息
-     */
-    encodeKeepalive(size: TerminalSize): string | Buffer {
-        return this.encodeResize(size)
-    }
-
-    /**
      * 解码服务器消息
      *
      * @param message 从 WebSocket 接收的原始消息
@@ -464,31 +435,4 @@ export class K8sDashboardHandler implements ProtocolHandler {
         return JSON.stringify([JSON.stringify(msg)])
     }
 
-    /**
-     * 将各种格式的 WebSocket 数据转换为字符串
-     *
-     * @param data WebSocket 数据
-     * @returns 字符串形式的数据
-     */
-    private dataToString(data: unknown): string {
-        if (typeof data === 'string') {
-            return data
-        }
-        if (Buffer.isBuffer(data)) {
-            return data.toString()
-        }
-        if (ArrayBuffer.isView(data) && !(data instanceof DataView)) {
-            // 处理 Uint8Array 等 ArrayBufferView 类型
-            return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString()
-        }
-        if (data instanceof ArrayBuffer) {
-            return Buffer.from(data).toString()
-        }
-        if (Array.isArray(data)) {
-            // 处理 Buffer 数组
-            return Buffer.concat(data).toString()
-        }
-        // 其他情况，尝试转换为字符串
-        return String(data)
-    }
 }

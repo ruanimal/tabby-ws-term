@@ -38,74 +38,79 @@ export interface SessionCreateOptions {
 }
 
 /**
- * 协议处理器接口
- * 所有协议处理器必须实现此接口
+ * 协议处理器抽象基类
+ * 提供通用默认实现，子类只需实现各自独有的逻辑
  */
-export interface ProtocolHandler {
+export abstract class ProtocolHandler {
     /**
      * 协议类型标识
      */
-    readonly protocolType: ProtocolType
+    abstract readonly protocolType: ProtocolType
 
     /**
-     * 判断该处理器是否能处理给定的 URL
-     * 每个 Handler 最清楚自己能处理什么样的 URL
-     * @param url WebSocket URL
-     * @returns 是否能处理该 URL
-     */
-    canHandle(url: string): boolean
-
-    /**
-     * 创建会话
+     * 创建会话（可选）
      * 某些协议（如 K8s Dashboard）需要先调用 API 创建会话，然后才能连接 WebSocket。
-     * 默认实现直接返回原始 URL。
-     * @param url 原始 URL
-     * @param options 创建选项
-     * @returns 包含 WebSocket URL 和 SessionID 的结果
      */
     createSession?(url: string, options?: SessionCreateOptions): Promise<SessionCreateResult>
 
     /**
      * 获取 WebSocket 连接选项
-     * 包括子协议、请求头等连接参数
-     * @param url WebSocket URL
-     * @returns WebSocket 连接选项
+     * 默认返回空对象，子类可覆盖以提供子协议、请求头等参数
      */
-    getWebSocketOptions?(url: string): WebSocketConnectOptions
-
-    /**
-     * 编码用户输入数据
-     * @param data 用户输入的原始数据
-     * @returns 编码后可发送的消息
-     */
-    encodeInput(data: Buffer): string | Buffer
-
-    /**
-     * 编码终端大小调整消息
-     * @param size 终端尺寸
-     * @returns 编码后的 resize 消息
-     */
-    encodeResize(size: TerminalSize): string | Buffer
-
-    /**
-     * 编码保活消息
-     * @param size 当前终端尺寸（某些协议需要）
-     * @returns 编码后的保活消息
-     */
-    encodeKeepalive(size: TerminalSize): string | Buffer
+    getWebSocketOptions(_url: string): WebSocketConnectOptions {
+        return {}
+    }
 
     /**
      * 编码连接初始消息
-     * 在 WebSocket 连接建立后，需要先发送此消息进行握手/认证。
-     * @param size 终端尺寸
-     * @returns 编码后的连接消息，或 null（如果协议不需要初始握手）
+     * 默认返回 null（不需要初始握手），子类可覆盖
      */
-    encodeConnect(size: TerminalSize): Buffer | null
+    encodeConnect(_size: TerminalSize): Buffer | null {
+        return null
+    }
+
+    /**
+     * 编码保活消息
+     * 默认使用 resize 消息作为保活
+     */
+    encodeKeepalive(size: TerminalSize): string | Buffer {
+        return this.encodeResize(size)
+    }
+
+    /**
+     * 编码用户输入数据
+     */
+    abstract encodeInput(data: Buffer): string | Buffer
+
+    /**
+     * 编码终端大小调整消息
+     */
+    abstract encodeResize(size: TerminalSize): string | Buffer
 
     /**
      * 解码服务器消息
-     * @param message 从 WebSocket 接收的原始消息
-     * @returns 解码后的消息数组（一条原始消息可能产生多个输出）
      */
-    decode(message: unknown): DecodedMessage[]
+    abstract decode(message: unknown): DecodedMessage[]
+
+    /**
+     * 将各种格式的 WebSocket 数据转换为字符串
+     */
+    protected dataToString(data: unknown): string {
+        if (typeof data === 'string') {
+            return data
+        }
+        if (Buffer.isBuffer(data)) {
+            return data.toString()
+        }
+        if (ArrayBuffer.isView(data) && !(data instanceof DataView)) {
+            return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString()
+        }
+        if (data instanceof ArrayBuffer) {
+            return Buffer.from(data).toString()
+        }
+        if (Array.isArray(data)) {
+            return Buffer.concat(data).toString()
+        }
+        return String(data)
+    }
 }
