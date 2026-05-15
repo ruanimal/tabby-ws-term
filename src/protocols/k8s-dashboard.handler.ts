@@ -69,21 +69,26 @@ export class K8sDashboardHandler extends ProtocolHandler {
             apiUrl += `?shell=${encodeURIComponent(podInfo.shell)}`
         }
 
-        console.log('[ws-term] prepareConnection apiUrl:', apiUrl)
-
         // 构建 HTTP 请求头（含认证信息）
-        const jweToken = urlObj.searchParams.get('jweToken')
+        // 认证通过 Cookie 传递，Dashboard 网关会从 Cookie 中解密 jweToken 并设置 Authorization 头
         const httpHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
         }
-        if (jweToken) {
-            httpHeaders['Authorization'] = `Bearer ${jweToken}`
+        const authCookie = this.buildAuthCookie(url)
+        if (authCookie) {
+            httpHeaders.Cookie = authCookie
         }
-        const wsOptions = this.getWebSocketOptions(url)
-        if (wsOptions.headers?.Cookie) {
-            httpHeaders.Cookie = wsOptions.headers.Cookie
+
+        // Dashboard 前端的 HTTP 拦截器会从 cookie 读取 jweToken 并设置 jwetoken 请求头
+        // API 模块通过 jwetoken 头（而非 Cookie）进行认证
+        const jweTokenRaw = this.extractJweToken(url)
+        if (jweTokenRaw) {
+            httpHeaders.jwetoken = jweTokenRaw
         }
+
+        console.log('[ws-term] prepareConnection apiUrl:', apiUrl)
+        console.log('[ws-term] prepareConnection httpHeaders:', httpHeaders)
 
         // 调用 API 创建 exec session
         const response = await this.httpGet(apiUrl, httpHeaders, options?.allowInsecure)
@@ -104,6 +109,11 @@ export class K8sDashboardHandler extends ProtocolHandler {
         const wsUrl = `${urlObj.protocol}//${urlObj.host}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
 
         console.log('[ws-term] prepareConnection wsUrl:', wsUrl)
+
+        // WebSocket 连接不需要认证信息，session ID（在 query string 中）就是凭据
+        // Dashboard 的 handleTerminalSession 仅通过 bind 消息的 SessionID 匹配
+        // 如果 WebSocket 带了 Cookie，网关可能尝试验证反而干扰连接
+        const wsOptions = this.getWebSocketOptions(url)
 
         return { wsUrl, wsOptions }
     }
@@ -188,23 +198,33 @@ export class K8sDashboardHandler extends ProtocolHandler {
     }
 
     /**
-     * 获取 WebSocket 连接选项
-     * 从 URL 查询参数提取认证信息（jweToken、username、authMode），
-     * 组合成 Cookie 请求头。
+     * 从 URL 查询参数提取原始 jweToken（未编码）
+     * 用于设置 jwetoken 请求头，Dashboard API 模块通过此头认证。
      *
-     * @param url WebSocket URL
-     * @returns WebSocket 连接选项，包含 Cookie 和 Origin 头
+     * @param url URL 字符串
+     * @returns 原始 jweToken 字符串，无则返回 null
      */
-    getWebSocketOptions(url: string): WebSocketConnectOptions {
+    private extractJweToken(url: string): string | null {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get('jweToken')
+    }
+
+    /**
+     * 构建认证 Cookie
+     * 从 URL 查询参数提取认证信息，组合成 Cookie 字符串。
+     * 仅用于 HTTP API 请求（创建 exec session），不用于 WebSocket 连接。
+     *
+     * @param url URL 字符串
+     * @returns Cookie 字符串，无认证参数时返回 null
+     */
+    private buildAuthCookie(url: string): string | null {
         const urlObj = new URL(url)
         const params = urlObj.searchParams
 
-        // 提取认证参数
         const jweToken = params.get('jweToken')
         const username = params.get('username')
         const authMode = params.get('authMode')
 
-        // 构建 Cookie 数组（按照固定顺序：authMode、username、jweToken）
         const cookieParts: string[] = []
         if (authMode) {
             cookieParts.push(`authMode=${authMode}`)
@@ -216,17 +236,22 @@ export class K8sDashboardHandler extends ProtocolHandler {
             cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
         }
 
-        // 构建 Origin 头（从 URL 提取协议和主机）
-        const origin = urlObj.origin
+        return cookieParts.length > 0 ? cookieParts.join('; ') : null
+    }
 
-        // 构建返回对象
+    /**
+     * 获取 WebSocket 连接选项
+     * WebSocket 连接不需要认证信息，session ID 就是凭据。
+     * 仅设置 Origin 头。
+     *
+     * @param url WebSocket URL
+     * @returns WebSocket 连接选项
+     */
+    getWebSocketOptions(url: string): WebSocketConnectOptions {
+        const urlObj = new URL(url)
+
         const headers: Record<string, string> = {
-            Origin: origin,
-        }
-
-        // 只有当存在认证参数时才添加 Cookie 头
-        if (cookieParts.length > 0) {
-            headers.Cookie = cookieParts.join('; ')
+            Origin: urlObj.origin,
         }
 
         console.log('[ws-term] getWebSocketOptions headers:', headers)
@@ -293,6 +318,19 @@ export class K8sDashboardHandler extends ProtocolHandler {
                 return []
             }
 
+            // 处理 SockJS close 帧: c[code,"reason"]
+            if (text.startsWith('c')) {
+                try {
+                    const payload = JSON.parse(text.slice(1)) as [number, string]
+                    if (Array.isArray(payload) && payload.length >= 2) {
+                        return [{ type: 'toast', data: `Server closed: [${payload[0]}] ${payload[1]}` }]
+                    }
+                } catch {
+                    // 解析失败，降级处理
+                }
+                return [{ type: 'toast', data: `Server closed: ${text}` }]
+            }
+
             // 处理数据消息（以 "a" 开头）
             if (text.startsWith('a')) {
                 const jsonPart = text.slice(1)
@@ -311,44 +349,49 @@ export class K8sDashboardHandler extends ProtocolHandler {
                     return []
                 }
 
-                // 提取数组第一个元素
-                const innerJson = outerArray[0]
-                if (typeof innerJson !== 'string') {
-                    return []
+                // 遍历数组中所有消息（SockJS 允许批量发送）
+                const results: DecodedMessage[] = []
+                for (const innerJson of outerArray) {
+                    if (typeof innerJson !== 'string') {
+                        continue
+                    }
+
+                    // 解析内部 JSON
+                    let innerObj: { Op?: string; Data?: string }
+                    try {
+                        innerObj = JSON.parse(innerJson)
+                    } catch {
+                        // 内部 JSON 解析失败，降级处理：将原始内容作为终端输出
+                        results.push({ type: 'output', data: Buffer.from(innerJson) })
+                        continue
+                    }
+
+                    // 检查 Op 字段
+                    if (!innerObj.Op) {
+                        continue
+                    }
+
+                    // 根据 Op 类型处理
+                    switch (innerObj.Op) {
+                        case K8S_DASHBOARD_OP.STDOUT:
+                            if (innerObj.Data !== undefined && innerObj.Data !== null) {
+                                results.push({ type: 'output', data: Buffer.from(innerObj.Data) })
+                            }
+                            break
+
+                        case K8S_DASHBOARD_OP.TOAST:
+                            if (innerObj.Data !== undefined && innerObj.Data !== null) {
+                                results.push({ type: 'toast', data: innerObj.Data })
+                            }
+                            break
+
+                        default:
+                            // 未知 Op 类型，忽略
+                            break
+                    }
                 }
 
-                // 解析内部 JSON
-                let innerObj: { Op?: string; Data?: string }
-                try {
-                    innerObj = JSON.parse(innerJson)
-                } catch {
-                    // 内部 JSON 解析失败，降级处理：将原始内容作为终端输出
-                    return [{ type: 'output', data: Buffer.from(innerJson) }]
-                }
-
-                // 检查 Op 字段
-                if (!innerObj.Op) {
-                    return []
-                }
-
-                // 根据 Op 类型处理
-                switch (innerObj.Op) {
-                    case K8S_DASHBOARD_OP.STDOUT:
-                        if (innerObj.Data !== undefined && innerObj.Data !== null) {
-                            return [{ type: 'output', data: Buffer.from(innerObj.Data) }]
-                        }
-                        return []
-
-                    case K8S_DASHBOARD_OP.TOAST:
-                        if (innerObj.Data !== undefined && innerObj.Data !== null) {
-                            return [{ type: 'toast', data: innerObj.Data }]
-                        }
-                        return []
-
-                    default:
-                        // 未知 Op 类型，忽略
-                        return []
-                }
+                return results
             }
 
             // 其他消息格式，返回空数组

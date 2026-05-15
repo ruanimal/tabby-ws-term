@@ -17,37 +17,9 @@ describe('K8sDashboardHandler', () => {
         })
 
         describe('getWebSocketOptions', () => {
-            it('should extract jweToken and build Cookie header', () => {
-                const handler = new K8sDashboardHandler()
-                const url = 'ws://example.com?jweToken=token123'
-                const result = handler.getWebSocketOptions(url)
-                expect(result.headers?.Cookie).toBe('jweToken=token123')
-            })
-
-            it('should extract username and build Cookie header', () => {
-                const handler = new K8sDashboardHandler()
-                const url = 'ws://example.com?username=admin'
-                const result = handler.getWebSocketOptions(url)
-                expect(result.headers?.Cookie).toBe('username=admin')
-            })
-
-            it('should extract authMode and build Cookie header', () => {
-                const handler = new K8sDashboardHandler()
-                const url = 'ws://example.com?authMode=token'
-                const result = handler.getWebSocketOptions(url)
-                expect(result.headers?.Cookie).toBe('authMode=token')
-            })
-
-            it('should combine multiple auth parameters in correct order', () => {
+            it('should not include Cookie header (WebSocket auth via session ID only)', () => {
                 const handler = new K8sDashboardHandler()
                 const url = 'ws://example.com?jweToken=token123&username=admin&authMode=token'
-                const result = handler.getWebSocketOptions(url)
-                expect(result.headers?.Cookie).toBe('authMode=token; username=admin; jweToken=token123')
-            })
-
-            it('should handle missing auth parameters', () => {
-                const handler = new K8sDashboardHandler()
-                const url = 'ws://example.com'
                 const result = handler.getWebSocketOptions(url)
                 expect(result.headers?.Cookie).toBeUndefined()
             })
@@ -64,6 +36,54 @@ describe('K8sDashboardHandler', () => {
                 const url = 'wss://example.com:8443/api/sockjs/123'
                 const result = handler.getWebSocketOptions(url)
                 expect(result.headers?.Origin).toBe('wss://example.com:8443')
+            })
+        })
+
+        describe('buildAuthCookie', () => {
+            it('should extract jweToken and build Cookie', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie('ws://example.com?jweToken=token123')
+                expect(result).toBe('jweToken=token123')
+            })
+
+            it('should extract username and build Cookie', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie('ws://example.com?username=admin')
+                expect(result).toBe('username=admin')
+            })
+
+            it('should extract authMode and build Cookie', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie('ws://example.com?authMode=token')
+                expect(result).toBe('authMode=token')
+            })
+
+            it('should combine multiple auth parameters in correct order', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie('ws://example.com?jweToken=token123&username=admin&authMode=token')
+                expect(result).toBe('authMode=token; username=admin; jweToken=token123')
+            })
+
+            it('should return null when no auth parameters', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie('ws://example.com')
+                expect(result).toBeNull()
+            })
+        })
+
+        describe('extractJweToken', () => {
+            it('should extract raw jweToken from URL', () => {
+                const handler = new K8sDashboardHandler()
+                const jweJson = '{"protected":"eyJhbGci","encrypted_key":"abc"}'
+                const url = `ws://example.com?jweToken=${encodeURIComponent(jweJson)}`
+                const result = (handler as any).extractJweToken(url)
+                expect(result).toBe(jweJson)
+            })
+
+            it('should return null when no jweToken param', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).extractJweToken('ws://example.com?username=admin')
+                expect(result).toBeNull()
             })
         })
 
@@ -255,6 +275,43 @@ describe('K8sDashboardHandler', () => {
                 })
             })
 
+            describe('SockJS close 帧 "c"', () => {
+                it('should parse c[code,"reason"] as toast message', () => {
+                    const result = handler.decode('c[2,"Unauthorized"]')
+                    expect(result).toEqual([{ type: 'toast', data: 'Server closed: [2] Unauthorized' }])
+                })
+
+                it('should parse c[3000,"Go away!"] as toast message', () => {
+                    const result = handler.decode('c[3000,"Go away!"]')
+                    expect(result).toEqual([{ type: 'toast', data: 'Server closed: [3000] Go away!' }])
+                })
+
+                it('should handle malformed close frame as raw toast', () => {
+                    const result = handler.decode('c{bad}')
+                    expect(result).toEqual([{ type: 'toast', data: 'Server closed: c{bad}' }])
+                })
+            })
+
+            describe('批量消息 "a" 帧', () => {
+                it('should decode multiple messages in a single a frame', () => {
+                    const msg = `a["{\\"Op\\":\\"stdout\\",\\"Data\\":\\"line1\\"}","{\\"Op\\":\\"stdout\\",\\"Data\\":\\"line2\\"}"]`
+                    const result = handler.decode(msg)
+                    expect(result).toEqual([
+                        { type: 'output', data: Buffer.from('line1') },
+                        { type: 'output', data: Buffer.from('line2') },
+                    ])
+                })
+
+                it('should handle mixed Op types in a batch', () => {
+                    const msg = `a["{\\"Op\\":\\"stdout\\",\\"Data\\":\\"output\\"}","{\\"Op\\":\\"toast\\",\\"Data\\":\\"info\\"}"]`
+                    const result = handler.decode(msg)
+                    expect(result).toEqual([
+                        { type: 'output', data: Buffer.from('output') },
+                        { type: 'toast', data: 'info' },
+                    ])
+                })
+            })
+
             describe('错误处理', () => {
                 it('should return empty array for invalid JSON after "a" prefix', () => {
                     const result = handler.decode('a[invalid json]')
@@ -295,11 +352,17 @@ describe('K8sDashboardHandler', () => {
         const TEST_URL = 'wss://dashboard.example.com?pod=nginx&namespace=default&authMode=token&username=admin&jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token'
 
         describe('典型 URL 处理', () => {
-            it('getWebSocketOptions should extract all auth params', () => {
+            it('getWebSocketOptions should only have Origin (no Cookie)', () => {
                 const handler = new K8sDashboardHandler()
                 const result = handler.getWebSocketOptions(TEST_URL)
-                expect(result.headers?.Cookie).toBe('authMode=token; username=admin; jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token')
+                expect(result.headers?.Cookie).toBeUndefined()
                 expect(result.headers?.Origin).toBe('wss://dashboard.example.com')
+            })
+
+            it('buildAuthCookie should extract all auth params', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildAuthCookie(TEST_URL)
+                expect(result).toBe('authMode=token; username=admin; jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token')
             })
         })
 
