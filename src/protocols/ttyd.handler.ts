@@ -16,22 +16,8 @@ import { TerminalSize, DecodedMessage, TTYD_PREFIX, ProtocolType, TtydConnectMes
  * - 设置标题：'1' + 标题文本
  * - 设置偏好：'2' + JSON 偏好设置
  */
-export class TtydHandler implements ProtocolHandler {
+export class TtydHandler extends ProtocolHandler {
     readonly protocolType: ProtocolType = 'ttyd'
-
-    /**
-     * 判断是否能处理给定的 URL
-     * ttyd 协议没有特定的 URL 特征，目前不自动识别
-     * 需要用户手动指定使用 ttyd 协议
-     *
-     * @param _url WebSocket URL
-     * @returns 总是返回 false（不自动识别）
-     */
-    canHandle(_url: string): boolean {
-        // ttyd 协议目前没有特定的 URL 特征可以识别
-        // 需要用户手动指定使用 ttyd 协议
-        return false
-    }
 
     /**
      * 获取 WebSocket 连接选项
@@ -82,17 +68,6 @@ export class TtydHandler implements ProtocolHandler {
     }
 
     /**
-     * 编码保活消息
-     * ttyd 协议使用 resize 消息作为保活
-     * @param size 当前终端尺寸
-     * @returns 编码后的保活消息
-     */
-    encodeKeepalive(size: TerminalSize): string {
-        // ttyd 使用 resize 消息作为保活
-        return this.encodeResize(size)
-    }
-
-    /**
      * 解码服务器消息
      * @param message 从 WebSocket 接收的原始消息
      * @returns 解码后的消息数组
@@ -132,33 +107,4 @@ export class TtydHandler implements ProtocolHandler {
         }
     }
 
-    /**
-     * 将 WebSocket 数据转换为字符串
-     * @param data WebSocket 接收的数据
-     * @returns 字符串形式的数据
-     */
-    private dataToString(data: unknown): string {
-        if (typeof data === 'string') {
-            return data
-        }
-        if (Buffer.isBuffer(data)) {
-            return data.toString('utf8')
-        }
-        if (Array.isArray(data)) {
-            // Buffer 数组，合并后转换
-            return Buffer.concat(data).toString('utf8')
-        }
-        if (data instanceof ArrayBuffer) {
-            return Buffer.from(data).toString('utf8')
-        }
-        // 其他情况（如 DataView、TypedArray），尝试转换
-        if (data && typeof data === 'object' && 'buffer' in data) {
-            // 可能是 TypedArray (Uint8Array 等)
-            const typedArray = data as Uint8Array
-            if (typedArray.buffer instanceof ArrayBuffer) {
-                return Buffer.from(typedArray.buffer).toString('utf8')
-            }
-        }
-        return ''
-    }
 }

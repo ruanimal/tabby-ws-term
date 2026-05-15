@@ -16,34 +16,6 @@ describe('K8sDashboardHandler', () => {
             })
         })
 
-        describe('canHandle', () => {
-            const handler = new K8sDashboardHandler()
-
-            it('should return true when URL contains pod and namespace params', () => {
-                const url = 'wss://dashboard.example.com?pod=my-pod&namespace=default'
-                expect(handler.canHandle(url)).toBe(true)
-            })
-
-            it('should return true when URL contains pod and ns params', () => {
-                const url = 'wss://dashboard.example.com?pod=my-pod&ns=kube-system'
-                expect(handler.canHandle(url)).toBe(true)
-            })
-
-            it('should return false when URL only has pod without namespace', () => {
-                const url = 'wss://dashboard.example.com?pod=my-pod'
-                expect(handler.canHandle(url)).toBe(false)
-            })
-
-            it('should return false when URL only has namespace without pod', () => {
-                const url = 'wss://dashboard.example.com?namespace=default'
-                expect(handler.canHandle(url)).toBe(false)
-            })
-
-            it('should return false for invalid URL', () => {
-                expect(handler.canHandle('not-a-url')).toBe(false)
-            })
-        })
-
         describe('getWebSocketOptions', () => {
             it('should extract jweToken and build Cookie header', () => {
                 const handler = new K8sDashboardHandler()
@@ -323,11 +295,6 @@ describe('K8sDashboardHandler', () => {
         const TEST_URL = 'wss://dashboard.example.com?pod=nginx&namespace=default&authMode=token&username=admin&jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token'
 
         describe('典型 URL 处理', () => {
-            it('canHandle should return true for typical k8s dashboard URL', () => {
-                const handler = new K8sDashboardHandler()
-                expect(handler.canHandle(TEST_URL)).toBe(true)
-            })
-
             it('getWebSocketOptions should extract all auth params', () => {
                 const handler = new K8sDashboardHandler()
                 const result = handler.getWebSocketOptions(TEST_URL)
