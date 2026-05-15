@@ -87,9 +87,10 @@ export class WSTermSession extends BaseSession {
                     this.emitServiceMessage('Connected')
                     this.open = true
 
-                    // 对于 K8s Dashboard 协议，需要等待 "o" 消息后才能发送初始化消息
+                    // 对于 K8s Dashboard 协议（基于 SockJS），需要等待 "o" 消息后才能发送任何数据
                     // 其他协议在连接建立后立即发送初始化消息
                     if (this.protocolHandler.protocolType !== 'k8s-dashboard') {
+                        this.receivedOpenMessage = true
                         this.sendInitialMessages()
                     }
 
@@ -222,7 +223,12 @@ export class WSTermSession extends BaseSession {
         if (payload === undefined) {
             this.logger.debug(prefix)
         } else if (Buffer.isBuffer(payload)) {
-            this.logger.debug(`${prefix} (${payload.length} bytes): ${payload.toString('hex')}`)
+            // 只有 ttyd 协议才转换为 hex 格式
+            if (this.protocolHandler.protocolType === 'ttyd') {
+                this.logger.debug(`${prefix} (${payload.length} bytes): ${payload.toString('hex').slice(0, 200)}`)
+            } else {
+                this.logger.debug(`${prefix} (${payload.length} bytes): ${payload.toString().slice(0, 200)}`)
+            }
         } else if (typeof payload === 'string') {
             const display = payload.length > 200 ? payload.slice(0, 200) + '…' : payload
             this.logger.debug(`${prefix}: ${display}`)
@@ -244,9 +250,10 @@ export class WSTermSession extends BaseSession {
     /**
      * 发送数据到 WebSocket
      * 使用协议处理器编码输入数据
+     * 注意：SockJS 协议要求收到 "o" 帧后才能发送数据
      */
     private sendToWebSocket(data: Buffer): void {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN && this.receivedOpenMessage) {
             const encoded = this.protocolHandler.encodeInput(data)
             this.debugLog('>>', 'send', encoded)
             this.socket.send(encoded)
@@ -263,7 +270,7 @@ export class WSTermSession extends BaseSession {
             this.lastHeight = h
         }
 
-        if (this.socket && this.socket.readyState === WebSocket.OPEN && this.lastWidth && this.lastHeight) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN && this.receivedOpenMessage && this.lastWidth && this.lastHeight) {
             const size: TerminalSize = {
                 columns: this.lastWidth,
                 rows: this.lastHeight,

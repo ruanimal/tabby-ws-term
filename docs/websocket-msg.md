@@ -22,3 +22,9 @@
 {"Op":"stdout","Data":"rz waiting to receive.**\u0018B0100000063f694\r\ufffd\u0011","Rows":0,"Cols":0}
 {"Op":"stdout","Data":"**\u0018B0100000063f694\r\ufffd\u0011","Rows":0,"Cols":0}
 ```
+
+## k8s dashboard
+### connect
+docs/k8s-dashboard-full-without-initiator.har
+### message
+docs/websocket-k8s-dashboard.har
