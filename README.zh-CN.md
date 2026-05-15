@@ -23,6 +23,7 @@
 |------|------|
 | `kube-exec` | Kubernetes `kubectl exec` 风格的 WebSocket 连接（默认） |
 | `ttyd` | [ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接 |
+| `k8s-dashboard` | Kubernetes Dashboard（SockJS）终端会话；需要 `jweToken`/`jwetoken` 认证并遵循 SockJS 的 "o" 握手 |
 
 ## 快速连接参数
 
@@ -32,7 +33,7 @@
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `ws-term.option.protocol` | 连接协议（`kube-exec` 或 `ttyd`） | `kube-exec` |
+| `ws-term.option.protocol` | 连接协议（`kube-exec`、`ttyd` 或 `k8s-dashboard`） | `kube-exec` |
 | `ws-term.option.shell` | 连接后执行的 shell 命令 | 服务端定义 |
 | `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `true` |
 
@@ -44,6 +45,10 @@ tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod"
 
 # CLI - ttyd 协议
 tabby quickConnect ws-term "ws://127.0.0.1:7681/ws?ws-term.option.protocol=ttyd"
+
+# CLI - k8s-dashboard（示例）
+# 传递 `pod` 和 `namespace`，并根据需要包含 `jweToken`/`authMode`/`username`
+tabby quickConnect ws-term "wss://dashboard.example.com/?pod=my-pod&namespace=default&authMode=token&username=dashboard-admin&jweToken=..."
 
 # CLI - 自定义 shell 并禁用确认弹窗
 tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=bash&ws-term.option.confirmDisconnect=false"
