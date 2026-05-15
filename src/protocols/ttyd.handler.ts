@@ -3,7 +3,7 @@
  * @module protocols/ttyd.handler
  */
 
-import { ProtocolHandler } from './interface'
+import { ProtocolHandler, PrepareConnectionOptions, PrepareConnectionResult } from './interface'
 import { TerminalSize, DecodedMessage, TTYD_PREFIX, ProtocolType, TtydConnectMessage } from './types'
 
 /**
@@ -20,13 +20,10 @@ export class TtydHandler extends ProtocolHandler {
     readonly protocolType: ProtocolType = 'ttyd'
 
     /**
-     * 获取 WebSocket 连接选项
      * ttyd 要求使用 'tty' 子协议
      */
-    getWebSocketOptions(_url: string): import('./interface').WebSocketConnectOptions {
-        return {
-            subprotocols: ['tty'],
-        }
+    override async prepareConnection(url: string, _options?: PrepareConnectionOptions): Promise<PrepareConnectionResult> {
+        return { wsUrl: url, wsOptions: { subprotocols: ['tty'] } }
     }
 
     /**

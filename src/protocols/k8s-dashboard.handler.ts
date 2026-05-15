@@ -3,7 +3,7 @@
  * @module protocols/k8s-dashboard.handler
  */
 
-import { ProtocolHandler, WebSocketConnectOptions, SessionCreateResult, SessionCreateOptions } from './interface'
+import { ProtocolHandler, WebSocketConnectOptions, PrepareConnectionOptions, PrepareConnectionResult } from './interface'
 import { TerminalSize, DecodedMessage, K8S_DASHBOARD_OP, ProtocolType } from './types'
 
 /**
@@ -48,14 +48,11 @@ export class K8sDashboardHandler extends ProtocolHandler {
     }
 
     /**
-     * 创建 exec session
-     * 调用 K8s Dashboard API 创建 exec session，获取 SessionID
-     *
-     * @param url 原始 URL（包含 pod 信息）
-     * @param options 创建选项
-     * @returns 包含 WebSocket URL 和 SessionID 的结果
+     * 准备连接
+     * 调用 K8s Dashboard HTTP API 创建 exec session，
+     * 并基于原始 URL 的认证参数构建 WebSocket 连接选项。
      */
-    async createSession(url: string, options?: SessionCreateOptions): Promise<SessionCreateResult> {
+    override async prepareConnection(url: string, options?: PrepareConnectionOptions): Promise<PrepareConnectionResult> {
         // 从 URL 中提取 pod 信息
         const podInfo = this.extractPodInfo(url)
         if (!podInfo) {
@@ -64,100 +61,51 @@ export class K8sDashboardHandler extends ProtocolHandler {
 
         // 构建 Dashboard API URL
         const urlObj = new URL(url)
-        // 将 WebSocket 协议转换为 HTTP 协议
         const httpProtocol = urlObj.protocol === 'wss:' ? 'https:' : 'http:'
         const baseUrl = `${httpProtocol}//${urlObj.host}`
         const containerPath = podInfo.container ? `/${podInfo.container}` : ''
         let apiUrl = `${baseUrl}/api/v1/pod/${podInfo.namespace}/${podInfo.pod}/shell${containerPath}`
-
-        // 添加 shell 参数
         if (podInfo.shell) {
             apiUrl += `?shell=${encodeURIComponent(podInfo.shell)}`
         }
 
-        console.log('[ws-term] createSession apiUrl:', apiUrl)
-        console.log('[ws-term] createSession podInfo:', podInfo)
+        console.log('[ws-term] prepareConnection apiUrl:', apiUrl)
 
-        // 调用 Dashboard API 创建 exec session
-        const headers: Record<string, string> = {
+        // 构建 HTTP 请求头（含认证信息）
+        const jweToken = urlObj.searchParams.get('jweToken')
+        const httpHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
         }
-
-        // 从 URL 中提取认证信息
-        const jweToken = urlObj.searchParams.get('jweToken')
-        const username = urlObj.searchParams.get('username')
-        const authMode = urlObj.searchParams.get('authMode')
-
-        // HTTP API 使用 Authorization 头认证
         if (jweToken) {
-            headers['Authorization'] = `Bearer ${jweToken}`
+            httpHeaders['Authorization'] = `Bearer ${jweToken}`
+        }
+        const wsOptions = this.getWebSocketOptions(url)
+        if (wsOptions.headers?.Cookie) {
+            httpHeaders.Cookie = wsOptions.headers.Cookie
         }
 
-        // 同时设置 Cookie（某些版本可能需要）
-        const cookieParts: string[] = []
-        if (authMode) {
-            cookieParts.push(`authMode=${authMode}`)
-        }
-        if (username) {
-            cookieParts.push(`username=${username}`)
-        }
-        if (jweToken) {
-            cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
-        }
-        if (cookieParts.length > 0) {
-            headers.Cookie = cookieParts.join('; ')
-        }
-
-        console.log('[ws-term] createSession headers:', headers)
-
-        // 发送请求创建 exec session
-        const response = await this.httpGet(apiUrl, headers, options?.allowInsecure)
-
-        console.log('[ws-term] createSession response status:', response.status)
-
+        // 调用 API 创建 exec session
+        const response = await this.httpGet(apiUrl, httpHeaders, options?.allowInsecure)
         if (!response.ok) {
             throw new Error(`创建 exec session 失败: ${response.status} ${response.statusText}`)
         }
-
         const data = await response.json() as { id: string }
         if (!data.id) {
             throw new Error('创建 exec session 失败: 响应中没有 session ID')
         }
 
-        // 更新 sessionId
         this.sessionId = data.id
+        console.log('[ws-term] prepareConnection session created:', data.id)
 
-        // 构建包含 SessionID 的 WebSocket URL
-        // 根据 HAR 文件分析，WebSocket URL 格式为：
-        // wss://host/api/sockjs/{server_id}/{session_id}/websocket?{session_id}
-        // 认证信息通过 Cookie 头传递，不在 URL 中
-
-        // 生成随机的 SockJS server_id 和 session_id
+        // 构建 SockJS WebSocket URL
         const serverId = Math.floor(Math.random() * 1000).toString()
         const sessionIdShort = Math.random().toString(36).substring(2, 11)
+        const wsUrl = `${urlObj.protocol}//${urlObj.host}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
 
-        // 构建完整的 WebSocket URL（只包含 SessionID）
-        const protocol = urlObj.protocol
-        const host = urlObj.host
-        const wsUrl = `${protocol}//${host}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
+        console.log('[ws-term] prepareConnection wsUrl:', wsUrl)
 
-        // 构建 WebSocket 连接选项（包含认证 headers）
-        const origin = `${protocol === 'wss:' ? 'https' : 'http'}://${host}`
-        const wsOptions: WebSocketConnectOptions = {
-            headers: {
-                Origin: origin,
-                ...(headers.Cookie ? { Cookie: headers.Cookie } : {}),
-            },
-        }
-
-        console.log('[ws-term] createSession result wsUrl:', wsUrl)
-
-        return {
-            wsUrl,
-            sessionId: data.id,
-            wsOptions,
-        }
+        return { wsUrl, wsOptions }
     }
 
     /**
