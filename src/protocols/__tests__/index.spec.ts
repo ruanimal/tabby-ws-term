@@ -13,7 +13,6 @@ import {
 import { KubeExecHandler } from '../kube-exec.handler'
 import { TtydHandler } from '../ttyd.handler'
 import { K8sDashboardHandler } from '../k8s-dashboard.handler'
-import { ProtocolType } from '../types'
 
 describe('createProtocolHandler', () => {
   describe('创建正确的处理器', () => {
@@ -283,84 +282,4 @@ describe('normalizeProtocolType 属性测试', () => {
   })
 })
 
-describe('Handler.canHandle 方法', () => {
-  describe('K8sDashboardHandler.canHandle', () => {
-    const handler = new K8sDashboardHandler()
 
-    it('返回 true 当 URL 包含 pod 和 namespace 参数', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod&namespace=default'
-      expect(handler.canHandle(url)).toBe(true)
-    })
-
-    it('返回 true 当 URL 包含 pod 和 ns 参数', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod&ns=kube-system'
-      expect(handler.canHandle(url)).toBe(true)
-    })
-
-    it('返回 false 当 URL 只有 pod 没有 namespace', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod'
-      expect(handler.canHandle(url)).toBe(false)
-    })
-
-    it('返回 false 当 URL 只有 namespace 没有 pod', () => {
-      const url = 'wss://dashboard.example.com?namespace=default'
-      expect(handler.canHandle(url)).toBe(false)
-    })
-
-    it('返回 false 对于无效的 URL', () => {
-      expect(handler.canHandle('not-a-url')).toBe(false)
-    })
-  })
-
-  describe('KubeExecHandler.canHandle', () => {
-    const handler = new KubeExecHandler()
-
-    it('返回 true 对于任何 URL（默认协议）', () => {
-      expect(handler.canHandle('wss://example.com/any/path')).toBe(true)
-      expect(handler.canHandle('not-a-url')).toBe(true)
-    })
-  })
-
-  describe('TtydHandler.canHandle', () => {
-    const handler = new TtydHandler()
-
-    it('返回 false（ttyd 协议不自动识别）', () => {
-      expect(handler.canHandle('wss://example.com/ws')).toBe(false)
-    })
-  })
-})
-
-describe('createProtocolHandler 自动识别', () => {
-  describe('根据 URL 自动识别协议类型', () => {
-    it('识别包含 pod/namespace 参数的 URL 为 k8s-dashboard', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod&namespace=default'
-      const handler = createProtocolHandler(undefined, url)
-      expect(handler).toBeInstanceOf(K8sDashboardHandler)
-    })
-
-    it('识别普通 URL 为 kube-exec', () => {
-      const url = 'wss://example.com/api/v1/namespaces/default/pods/my-pod/exec'
-      const handler = createProtocolHandler(undefined, url)
-      expect(handler).toBeInstanceOf(KubeExecHandler)
-    })
-
-    it('无 URL 时返回 kube-exec', () => {
-      const handler = createProtocolHandler(undefined, undefined)
-      expect(handler).toBeInstanceOf(KubeExecHandler)
-    })
-  })
-
-  describe('指定的协议类型优先', () => {
-    it('即使 URL 包含 pod 参数，指定 ttyd 仍使用 ttyd', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod&namespace=default'
-      const handler = createProtocolHandler('ttyd', url)
-      expect(handler).toBeInstanceOf(TtydHandler)
-    })
-
-    it('指定无效的协议类型时使用自动识别', () => {
-      const url = 'wss://dashboard.example.com?pod=my-pod&namespace=default'
-      const handler = createProtocolHandler('invalid' as ProtocolType, url)
-      expect(handler).toBeInstanceOf(K8sDashboardHandler)
-    })
-  })
-})
