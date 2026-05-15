@@ -37,6 +37,7 @@ When using CLI `quickConnect` or URL schema, extra options can be passed via URL
 |-----------|-------------|---------|
 | `ws-term.option.protocol` | Connection protocol (`kube-exec`, `ttyd`, or `k8s-dashboard`) | `kube-exec` |
 | `ws-term.option.shell` | Shell command to execute after connecting | Server-defined |
+| `ws-term.option.title` | Tab title displayed in Tabby | `host + pathname` |
 | `ws-term.option.allowInsecure` | Allow self-signed certificates (skip TLS verification) | `false` |
 | `ws-term.option.confirmDisconnect` | Show confirmation dialog on disconnect (`true`/`false`) | `true` |
 

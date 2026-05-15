@@ -14,6 +14,8 @@ export interface WSTermProfileOptions {
     protocol?: ProtocolType
     /** 是否允许自签名证书（跳过证书验证），默认为 false */
     allowInsecure?: boolean
+    /** Tab 标题，默认从 URL 的 host+pathname 生成 */
+    title?: string
 }
 
 export interface WSTermProfile extends ConnectableTerminalProfile {
@@ -66,18 +68,15 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
     }
 
     getDescription(profile: PartialProfile<WSTermProfile>): string {
+        if (profile.options?.title) {
+            return profile.options.title
+        }
         if (!profile.options?.wsUrl) {
             return ''
         }
         try {
             const url = new URL(profile.options.wsUrl)
-            const params = new URLSearchParams(url.search)
-            const pod = params.get('pod') || ''
-            const namespace = params.get('namespace') || params.get('ns') || ''
-            if (pod) {
-                return namespace ? `${namespace}/${pod}` : pod
-            }
-            return url.host
+            return url.host + url.pathname.replace(/\/+$/, '') || url.host
         } catch {
             return profile.options.wsUrl
         }
@@ -124,12 +123,25 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             options.allowInsecure = params.get('ws-term.option.allowInsecure') === 'true'
             params.delete('ws-term.option.allowInsecure')
         }
+        if (params.has('ws-term.option.title')) {
+            options.title = params.get('ws-term.option.title')!
+            params.delete('ws-term.option.title')
+        }
 
         url.search = params.toString()
         options.wsUrl = url.toString()
 
+        // tab 标题：优先使用 title 参数，否则用 host+pathname
+        const name = options.title || (() => {
+            try {
+                return url.host + url.pathname.replace(/\/+$/, '') || url.host
+            } catch {
+                return query
+            }
+        })()
+
         return {
-            name: query,
+            name,
             type: 'ws-term',
             options,
         }

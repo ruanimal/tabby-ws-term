@@ -35,6 +35,7 @@
 |------|------|--------|
 | `ws-term.option.protocol` | 连接协议（`kube-exec`、`ttyd` 或 `k8s-dashboard`） | `kube-exec` |
 | `ws-term.option.shell` | 连接后执行的 shell 命令 | 服务端定义 |
+| `ws-term.option.title` | Tabby 中显示的 Tab 标题 | `host + pathname` |
 | `ws-term.option.allowInsecure` | 是否允许自签名证书（跳过证书验证） | `false` |
 | `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `true` |
 

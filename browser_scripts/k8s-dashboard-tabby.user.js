@@ -307,6 +307,13 @@
         wsUrl.searchParams.set('pod', podInfo.pod);
         wsUrl.searchParams.set('ws-term.option.protocol', 'k8s-dashboard');
 
+        // 生成 tab 标题
+        let title = podInfo.namespace + '/' + podInfo.pod;
+        if (CONFIG.includeContainer && podInfo.container) {
+            title += '/' + podInfo.container;
+        }
+        wsUrl.searchParams.set('ws-term.option.title', title);
+
         // 认证参数通过 cookie.* 前缀传递，handler 会自动构建 Cookie 头
         wsUrl.searchParams.set('cookie.authMode', auth.authMode);
         if (auth.username) {

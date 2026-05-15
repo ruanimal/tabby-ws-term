@@ -2,7 +2,7 @@ import colors from 'ansi-colors'
 import { Component, Injector, Input } from '@angular/core'
 import { LogService } from 'tabby-core'
 import { BaseTerminalTabComponent } from 'tabby-terminal'
-import { WSTermProfile } from '../profiles'
+import { WSTermProfile, WSTermProfilesService } from '../profiles'
 import { WSTermSession } from '../session'
 
 // Handle pug template loading
@@ -19,12 +19,14 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     @Input() profile: WSTermProfile
     wsSession: WSTermSession | null = null
     private isReconnecting = false
+    private profilesService: WSTermProfilesService
 
     constructor(
         injector: Injector,
     ) {
         super(injector)
         this.enableToolbar = true
+        this.profilesService = injector.get(WSTermProfilesService)
     }
 
     ngOnInit(): void {
@@ -58,7 +60,8 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     }
 
     async initializeSession(): Promise<void> {
-        const logger = this.injector.get(LogService).create(`ws-term-${this.profile.options.wsUrl}`)
+        const logName = this.profile.options.title || this.profile.name || this.profile.options.wsUrl
+        const logger = this.injector.get(LogService).create(`ws-term-${logName}`)
         const session = new WSTermSession(logger, this.profile)
         this.wsSession = session
         this.setSession(session)
@@ -128,18 +131,7 @@ export class WSTermTabComponent extends BaseTerminalTabComponent<WSTermProfile> 
     }
 
     getDescription(): string {
-        try {
-            const url = new URL(this.profile.options.wsUrl)
-            const params = new URLSearchParams(url.search)
-            const pod = params.get('pod') || ''
-            const namespace = params.get('namespace') || params.get('ns') || ''
-            if (pod) {
-                return namespace ? `${namespace}/${pod}` : pod
-            }
-            return url.host
-        } catch {
-            return this.profile.options.wsUrl || 'WS Terminal'
-        }
+        return this.profilesService.getDescription(this.profile) || 'WS Terminal'
     }
 
     async getRecoveryToken(): Promise<any> {
