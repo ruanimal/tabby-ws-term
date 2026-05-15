@@ -155,7 +155,7 @@ export class WSTermSession extends BaseSession {
                 // 收到 "o" 消息后，发送初始化消息（bind 和 resize）
                 if (!this.receivedOpenMessage) {
                     this.receivedOpenMessage = true
-                    this.logger.debug('Received open message, sending initial messages')
+                    this.debugLog('<<', 'open', 'sending initial messages')
                     this.sendInitialMessages()
                 }
                 break
@@ -164,7 +164,7 @@ export class WSTermSession extends BaseSession {
                 break
             case 'title':
                 // 设置窗口标题（未来可实现）
-                this.logger.debug(`Received title: ${msg.data}`)
+                this.debugLog('<<', 'title', msg.data)
                 break
             case 'toast':
                 // Toast 消息作为服务消息显示
@@ -172,7 +172,7 @@ export class WSTermSession extends BaseSession {
                 break
             case 'preferences':
                 // 处理偏好设置（未来可实现）
-                this.logger.debug('Received preferences:', msg.data)
+                this.debugLog('<<', 'preferences', msg.data)
                 break
         }
     }
@@ -183,7 +183,7 @@ export class WSTermSession extends BaseSession {
      */
     private sendInitialMessages(): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            this.logger.debug('Skipping initial messages - socket not open')
+            this.debugLog('!!', 'init', 'skipping - socket not open')
             return
         }
 
@@ -194,7 +194,6 @@ export class WSTermSession extends BaseSession {
         if (connectMsg) {
             this.debugLog('>>', 'connect', connectMsg)
             this.socket.send(connectMsg)
-            this.logger.debug(`Sent connect message (${this.protocolHandler.protocolType})`)
         }
 
         // Send initial resize
@@ -219,6 +218,9 @@ export class WSTermSession extends BaseSession {
     }
 
     private debugLog(direction: '<<' | '>>' | '!!', event: string, payload?: unknown): void {
+        if (!process.env.WSTERM_DEBUG) {
+            return
+        }
         const prefix = `[WS-DEBUG] ${direction} ${event}`
         if (payload === undefined) {
             this.logger.debug(prefix)
@@ -278,7 +280,6 @@ export class WSTermSession extends BaseSession {
             const encoded = this.protocolHandler.encodeResize(size)
             this.debugLog('>>', 'resize', encoded)
             this.socket.send(encoded)
-            this.logger.debug(`Sent resize: ${this.lastWidth}x${this.lastHeight}`)
         }
     }
 
@@ -356,7 +357,7 @@ export class WSTermSession extends BaseSession {
      */
     private sendKeepalive(): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            this.logger.debug('Skipping keepalive - socket not open')
+            this.debugLog('!!', 'keepalive', 'skipping - socket not open')
             return
         }
 
@@ -371,7 +372,6 @@ export class WSTermSession extends BaseSession {
                 const encoded = this.protocolHandler.encodeKeepalive(size)
                 this.debugLog('>>', 'keepalive', encoded)
                 this.socket.send(encoded)
-                this.logger.debug(`Sent keepalive (${this.protocolHandler.protocolType}: ${this.lastWidth}x${this.lastHeight})`)
             } catch (e: any) {
                 this.logger.error(`Failed to send keepalive: ${e.message}`)
                 // 如果发送失败，socket 可能已断开
