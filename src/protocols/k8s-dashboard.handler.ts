@@ -60,9 +60,11 @@ export class K8sDashboardHandler extends ProtocolHandler {
         }
 
         // 构建 Dashboard API URL
+        // 保留原 URL 的 pathname 作为 base path，以兼容反向代理场景
         const urlObj = new URL(url)
         const httpProtocol = urlObj.protocol === 'wss:' ? 'https:' : 'http:'
-        const baseUrl = `${httpProtocol}//${urlObj.host}`
+        const basePath = urlObj.pathname.replace(/\/+$/, '')
+        const baseUrl = `${httpProtocol}//${urlObj.host}${basePath}`
         const containerPath = podInfo.container ? `/${podInfo.container}` : ''
         let apiUrl = `${baseUrl}/api/v1/pod/${podInfo.namespace}/${podInfo.pod}/shell${containerPath}`
         if (podInfo.shell) {
@@ -73,7 +75,7 @@ export class K8sDashboardHandler extends ProtocolHandler {
         // 认证通过 Cookie 传递，Dashboard 网关会从 Cookie 中解密 jweToken 并设置 Authorization 头
         const httpHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
         }
         const authCookie = this.buildAuthCookie(url)
         if (authCookie) {
@@ -87,6 +89,9 @@ export class K8sDashboardHandler extends ProtocolHandler {
             httpHeaders.jwetoken = jweTokenRaw
         }
 
+        // 部分反向代理网关会校验 Referer，使用 baseUrl 作为 Referer
+        httpHeaders.Referer = `${baseUrl}/`
+
         console.log('[ws-term] prepareConnection apiUrl:', apiUrl)
         console.log('[ws-term] prepareConnection httpHeaders:', httpHeaders)
 
@@ -95,7 +100,14 @@ export class K8sDashboardHandler extends ProtocolHandler {
         if (!response.ok) {
             throw new Error(`创建 exec session 失败: ${response.status} ${response.statusText}`)
         }
-        const data = await response.json() as { id: string }
+        const bodyText = await response.text()
+        let data: { id: string }
+        try {
+            data = JSON.parse(bodyText) as { id: string }
+        } catch (err) {
+            console.error('[ws-term] prepareConnection 解析 JSON 失败, body:', bodyText)
+            throw new Error(`创建 exec session 失败: 响应解析失败: ${(err as Error).message}`)
+        }
         if (!data.id) {
             throw new Error('创建 exec session 失败: 响应中没有 session ID')
         }
@@ -106,13 +118,12 @@ export class K8sDashboardHandler extends ProtocolHandler {
         // 构建 SockJS WebSocket URL
         const serverId = Math.floor(Math.random() * 1000).toString()
         const sessionIdShort = Math.random().toString(36).substring(2, 11)
-        const wsUrl = `${urlObj.protocol}//${urlObj.host}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
+        const wsUrl = `${urlObj.protocol}//${urlObj.host}${basePath}/api/sockjs/${serverId}/${sessionIdShort}/websocket?${data.id}`
 
         console.log('[ws-term] prepareConnection wsUrl:', wsUrl)
 
-        // WebSocket 连接不需要认证信息，session ID（在 query string 中）就是凭据
-        // Dashboard 的 handleTerminalSession 仅通过 bind 消息的 SessionID 匹配
-        // 如果 WebSocket 带了 Cookie，网关可能尝试验证反而干扰连接
+        // WebSocket 连接也需要带上鉴权 Cookie：在反向代理网关场景下，网关会先校验 Cookie 才放行 upgrade。
+        // Dashboard 自身仅依赖 bind 消息的 SessionID 匹配，多余 Cookie 不影响。
         const wsOptions = this.getWebSocketOptions(url)
 
         return { wsUrl, wsOptions }
@@ -224,6 +235,7 @@ export class K8sDashboardHandler extends ProtocolHandler {
         const jweToken = params.get('jweToken')
         const username = params.get('username')
         const authMode = params.get('authMode')
+        const authorization = params.get('authorization') || params.get('Authorization')
 
         const cookieParts: string[] = []
         if (authMode) {
@@ -235,14 +247,17 @@ export class K8sDashboardHandler extends ProtocolHandler {
         if (jweToken) {
             cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
         }
+        if (authorization) {
+            cookieParts.push(`Authorization=${authorization}`)
+        }
 
         return cookieParts.length > 0 ? cookieParts.join('; ') : null
     }
 
     /**
      * 获取 WebSocket 连接选项
-     * WebSocket 连接不需要认证信息，session ID 就是凭据。
-     * 仅设置 Origin 头。
+     * 在反向代理网关场景下，WebSocket upgrade 也需要鉴权 Cookie；
+     * Dashboard 自身仅依赖 bind 消息的 SessionID 匹配，多余 Cookie 不影响。
      *
      * @param url WebSocket URL
      * @returns WebSocket 连接选项
@@ -252,6 +267,11 @@ export class K8sDashboardHandler extends ProtocolHandler {
 
         const headers: Record<string, string> = {
             Origin: urlObj.origin,
+        }
+
+        const authCookie = this.buildAuthCookie(url)
+        if (authCookie) {
+            headers.Cookie = authCookie
         }
 
         console.log('[ws-term] getWebSocketOptions headers:', headers)

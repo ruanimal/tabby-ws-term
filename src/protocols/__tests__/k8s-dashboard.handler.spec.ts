@@ -17,9 +17,16 @@ describe('K8sDashboardHandler', () => {
         })
 
         describe('getWebSocketOptions', () => {
-            it('should not include Cookie header (WebSocket auth via session ID only)', () => {
+            it('should include Cookie header for gateway auth', () => {
                 const handler = new K8sDashboardHandler()
                 const url = 'ws://example.com?jweToken=token123&username=admin&authMode=token'
+                const result = handler.getWebSocketOptions(url)
+                expect(result.headers?.Cookie).toBe('authMode=token; username=admin; jweToken=token123')
+            })
+
+            it('should not set Cookie header when no auth params', () => {
+                const handler = new K8sDashboardHandler()
+                const url = 'ws://example.com'
                 const result = handler.getWebSocketOptions(url)
                 expect(result.headers?.Cookie).toBeUndefined()
             })
@@ -352,10 +359,10 @@ describe('K8sDashboardHandler', () => {
         const TEST_URL = 'wss://dashboard.example.com?pod=nginx&namespace=default&authMode=token&username=admin&jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token'
 
         describe('典型 URL 处理', () => {
-            it('getWebSocketOptions should only have Origin (no Cookie)', () => {
+            it('getWebSocketOptions should include Cookie and Origin', () => {
                 const handler = new K8sDashboardHandler()
                 const result = handler.getWebSocketOptions(TEST_URL)
-                expect(result.headers?.Cookie).toBeUndefined()
+                expect(result.headers?.Cookie).toBeDefined()
                 expect(result.headers?.Origin).toBe('wss://dashboard.example.com')
             })
 

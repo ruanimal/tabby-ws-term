@@ -82,10 +82,27 @@
         return directValue || normalizeText(element.textContent);
     }
 
-    function wsOriginFromLocation() {
-        const url = new URL(window.location.origin);
+    function wsBaseUrlFromLocation() {
+        // 优先使用 <base href>，K8s Dashboard 通常会通过它声明部署 base path（反代场景下含子路径）。
+        // 退化为 location.origin。
+        let baseHref = window.location.origin;
+        try {
+            const baseElement = document.querySelector('base[href]');
+            if (baseElement) {
+                baseHref = new URL(baseElement.getAttribute('href'), window.location.href).toString();
+            } else if (document.baseURI) {
+                baseHref = document.baseURI;
+            }
+        } catch {
+            baseHref = window.location.origin;
+        }
+
+        const url = new URL(baseHref);
         url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-        return url.origin;
+        url.hash = '';
+        url.search = '';
+        url.pathname = url.pathname.replace(/\/+$/, '');
+        return url.toString();
     }
 
     function pickFirstValue(searchParams, keys) {
@@ -273,6 +290,7 @@
             authMode: getCookie('authMode') || 'token',
             username: getCookie('username'),
             jweToken: getCookie('jweToken'),
+            authorization: getCookie('Authorization') || getCookie('authorization'),
         };
     }
 
@@ -284,7 +302,7 @@
             return null;
         }
 
-        const wsUrl = new URL(wsOriginFromLocation());
+        const wsUrl = new URL(wsBaseUrlFromLocation());
         wsUrl.searchParams.set('namespace', podInfo.namespace);
         wsUrl.searchParams.set('pod', podInfo.pod);
         wsUrl.searchParams.set('authMode', auth.authMode);
@@ -296,6 +314,9 @@
         }
         if (auth.username) {
             wsUrl.searchParams.set('username', auth.username);
+        }
+        if (auth.authorization) {
+            wsUrl.searchParams.set('authorization', auth.authorization);
         }
         if (CONFIG.dashboardShell) {
             wsUrl.searchParams.set('shell', CONFIG.dashboardShell);
