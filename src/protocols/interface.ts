@@ -18,23 +18,21 @@ export interface WebSocketConnectOptions {
 }
 
 /**
- * 会话创建结果
+ * prepareConnection 选项
  */
-export interface SessionCreateResult {
-    /** WebSocket 连接 URL */
-    wsUrl: string
-    /** 会话 ID */
-    sessionId: string
-    /** WebSocket 连接选项（包含认证 headers） */
-    wsOptions?: WebSocketConnectOptions
+export interface PrepareConnectionOptions {
+    /** 是否允许自签名证书（跳过证书验证） */
+    allowInsecure?: boolean
 }
 
 /**
- * 会话创建选项
+ * prepareConnection 结果
  */
-export interface SessionCreateOptions {
-    /** 是否允许自签名证书（跳过证书验证） */
-    allowInsecure?: boolean
+export interface PrepareConnectionResult {
+    /** 最终 WebSocket 连接 URL */
+    wsUrl: string
+    /** WebSocket 连接选项（子协议、请求头等） */
+    wsOptions: WebSocketConnectOptions
 }
 
 /**
@@ -48,17 +46,14 @@ export abstract class ProtocolHandler {
     abstract readonly protocolType: ProtocolType
 
     /**
-     * 创建会话（可选）
-     * 某些协议（如 K8s Dashboard）需要先调用 API 创建会话，然后才能连接 WebSocket。
+     * 准备连接
+     * 负责在建立 WebSocket 前的所有准备工作：
+     * 某些协议（如 K8s Dashboard）需要先调用 HTTP API 创建会话；
+     * 某些协议（如 ttyd）需要指定子协议；
+     * 默认实现直接返回原始 URL 和空选项。
      */
-    createSession?(url: string, options?: SessionCreateOptions): Promise<SessionCreateResult>
-
-    /**
-     * 获取 WebSocket 连接选项
-     * 默认返回空对象，子类可覆盖以提供子协议、请求头等参数
-     */
-    getWebSocketOptions(_url: string): WebSocketConnectOptions {
-        return {}
+    async prepareConnection(url: string, _options?: PrepareConnectionOptions): Promise<PrepareConnectionResult> {
+        return { wsUrl: url, wsOptions: {} }
     }
 
     /**

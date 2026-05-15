@@ -37,36 +37,26 @@ export class WSTermSession extends BaseSession {
     }
 
     async start(): Promise<void> {
-        let wsUrl = this.profile.options.wsUrl
-        let sessionWsOptions: WebSocketConnectOptions | undefined
+        let wsUrl: string
+        let wsOptions: WebSocketConnectOptions
 
-        // 如果协议处理器支持 createSession，先调用它创建 session
-        if (this.protocolHandler.createSession) {
-            this.emitServiceMessage('Creating exec session...')
-            try {
-                const result = await this.protocolHandler.createSession(wsUrl, {
-                    allowInsecure: this.profile.options.allowInsecure,
-                })
-                wsUrl = result.wsUrl
-                sessionWsOptions = result.wsOptions
-                this.logger.info(`Exec session created: ${result.sessionId}`)
-                this.emitServiceMessage(`Session created: ${result.sessionId}`)
-            } catch (e: any) {
-                this.logger.error(`Failed to create exec session: ${e.message}`)
-                this.emitServiceMessage(`Failed to create session: ${e.message}`)
-                throw new Error(`Failed to create exec session: ${e.message}`)
-            }
+        try {
+            const result = await this.protocolHandler.prepareConnection(
+                this.profile.options.wsUrl,
+                { allowInsecure: this.profile.options.allowInsecure },
+            )
+            wsUrl = result.wsUrl
+            wsOptions = result.wsOptions
+        } catch (e: any) {
+            this.emitServiceMessage(`Failed to prepare connection: ${e.message}`)
+            throw new Error(`Failed to prepare connection: ${e.message}`)
         }
 
         this.emitServiceMessage(`Connecting to ${wsUrl}`)
 
         return new Promise((resolve, reject) => {
             try {
-                // Get WebSocket options from protocol handler (includes auth headers)
-                // 优先使用 createSession 返回的 wsOptions，否则从 wsUrl 获取
-                const wsOptions = sessionWsOptions ?? this.protocolHandler.getWebSocketOptions?.(wsUrl) ?? {}
-
-                // Build default headers
+                // Get WebSocket options from protocol handler (includes auth headers, subprotocols, etc.)
                 const defaultHeaders: Record<string, string> = {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
                     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
