@@ -35,6 +35,7 @@
 |------|------|--------|
 | `ws-term.option.protocol` | 连接协议（`kube-exec`、`ttyd` 或 `k8s-dashboard`） | `kube-exec` |
 | `ws-term.option.shell` | 连接后执行的 shell 命令 | 服务端定义 |
+| `ws-term.option.allowInsecure` | 是否允许自签名证书（跳过证书验证） | `false` |
 | `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `true` |
 
 ### 使用示例
@@ -56,3 +57,11 @@ tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=
 # URL scheme
 open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod"
 ```
+
+## 浏览器 userscript
+
+仓库包含一个配套的浏览器 userscript：`browser_scripts/k8s-dashboard-tabby.user.js`。
+
+- 目的：从 Kubernetes Dashboard 的 cookie 中提取 `jweToken`、`authMode` 与 `username`，构造 `tabby://` quickConnect URL，便于在浏览器中一键启动 `k8s-dashboard` 会话。
+- 使用方法：在浏览器中安装脚本（Tampermonkey/Violentmonkey），打开 Dashboard 页面，使用注入的 Tabby 链接即可把带认证参数的 URL 传给 Tabby。
+

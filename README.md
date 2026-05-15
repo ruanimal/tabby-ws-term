@@ -37,6 +37,7 @@ When using CLI `quickConnect` or URL schema, extra options can be passed via URL
 |-----------|-------------|---------|
 | `ws-term.option.protocol` | Connection protocol (`kube-exec`, `ttyd`, or `k8s-dashboard`) | `kube-exec` |
 | `ws-term.option.shell` | Shell command to execute after connecting | Server-defined |
+| `ws-term.option.allowInsecure` | Allow self-signed certificates (skip TLS verification) | `false` |
 | `ws-term.option.confirmDisconnect` | Show confirmation dialog on disconnect (`true`/`false`) | `true` |
 
 ### Examples
@@ -58,3 +59,11 @@ tabby quickConnect ws-term "ws://example.com/ws?pod=my-pod&ws-term.option.shell=
 # URL schema
 open "tabby://quickConnect?providerId=ws-term&query=ws%3A%2F%2Fexample.com%2Fws%3Fpod%3Dmy-pod"
 ```
+
+## Browser userscript
+
+There is a companion browser userscript at `browser_scripts/k8s-dashboard-tabby.user.js`.
+
+- Purpose: extract `jweToken`, `authMode` and `username` from Kubernetes Dashboard cookies and construct a `tabby://` quickConnect URL so Tabby can open a `k8s-dashboard` session.
+- Usage: install the userscript in the browser (Tampermonkey/Violentmonkey), open Dashboard, and use the injected Tabby link to launch Tabby with the required auth parameters.
+
