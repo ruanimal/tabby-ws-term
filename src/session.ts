@@ -6,6 +6,7 @@ import WebSocket from 'ws'
 import { WSTermProfile } from './profiles'
 import { ProtocolHandler, createProtocolHandler, normalizeProtocolType, TerminalSize, DecodedMessage, WebSocketConnectOptions } from './protocols'
 
+
 export class WSTermSession extends BaseSession {
     get serviceMessage$(): Observable<string> { return this.serviceMessage }
 
@@ -30,25 +31,9 @@ export class WSTermSession extends BaseSession {
     ) {
         super(logger)
 
-        const wsUrl = profile.options.wsUrl
-
-        // 创建协议处理器：
-        // 1. 如果用户指定了有效的协议类型，使用用户指定的
-        // 2. 如果用户未指定或指定无效，根据 URL 自动识别
-        if (profile.options.protocol && normalizeProtocolType(profile.options.protocol) === profile.options.protocol) {
-            // 用户指定了有效的协议类型
-            this.protocolHandler = createProtocolHandler(profile.options.protocol, wsUrl)
-            logger.info(`Using specified protocol type: ${profile.options.protocol}`)
-        } else {
-            // 用户未指定或指定无效，自动识别
-            this.protocolHandler = createProtocolHandler(undefined, wsUrl)
-            const detectedType = this.protocolHandler.protocolType
-            if (profile.options.protocol !== undefined) {
-                logger.info(`Invalid protocol type '${profile.options.protocol}', auto-detected as '${detectedType}'`)
-            } else {
-                logger.info(`Protocol type auto-detected as '${detectedType}'`)
-            }
-        }
+        const protocolType = normalizeProtocolType(profile.options.protocol)
+        this.protocolHandler = createProtocolHandler(protocolType)
+        logger.info(`Using protocol type: ${protocolType}`)
     }
 
     async start(): Promise<void> {
