@@ -305,18 +305,27 @@
         const wsUrl = new URL(wsBaseUrlFromLocation());
         wsUrl.searchParams.set('namespace', podInfo.namespace);
         wsUrl.searchParams.set('pod', podInfo.pod);
-        wsUrl.searchParams.set('authMode', auth.authMode);
-        wsUrl.searchParams.set('jweToken', auth.jweToken);
         wsUrl.searchParams.set('ws-term.option.protocol', 'k8s-dashboard');
+
+        // 认证参数通过 cookie.* 前缀传递，handler 会自动构建 Cookie 头
+        wsUrl.searchParams.set('cookie.authMode', auth.authMode);
+        if (auth.username) {
+            wsUrl.searchParams.set('cookie.username', auth.username);
+        }
+        if (auth.jweToken) {
+            wsUrl.searchParams.set('cookie.jweToken', auth.jweToken);
+        }
+        if (auth.authorization) {
+            wsUrl.searchParams.set('cookie.Authorization', auth.authorization);
+        }
+
+        // jweToken 同时作为请求头传递（Dashboard API 模块通过 jwetoken 头认证）
+        if (auth.jweToken) {
+            wsUrl.searchParams.set('header.jwetoken', auth.jweToken);
+        }
 
         if (CONFIG.includeContainer && podInfo.container) {
             wsUrl.searchParams.set('container', podInfo.container);
-        }
-        if (auth.username) {
-            wsUrl.searchParams.set('username', auth.username);
-        }
-        if (auth.authorization) {
-            wsUrl.searchParams.set('authorization', auth.authorization);
         }
         if (CONFIG.dashboardShell) {
             wsUrl.searchParams.set('shell', CONFIG.dashboardShell);

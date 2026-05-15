@@ -88,6 +88,57 @@ export abstract class ProtocolHandler {
     abstract decode(message: unknown): DecodedMessage[]
 
     /**
+     * 从 URL 查询参数中提取带前缀的参数
+     *
+     * 约定：URL 参数使用 `prefix.key=value` 格式传递额外信息。
+     * 例如：
+     * - `cookie.authMode=token` → { authMode: "token" }
+     * - `header.X-Custom=foo`   → { "X-Custom": "foo" }
+     *
+     * @param url URL 字符串
+     * @param prefix 前缀名（不含点号），如 "cookie"、"header"
+     * @returns 提取到的键值对
+     */
+    protected extractPrefixedParams(url: string, prefix: string): Record<string, string> {
+        const urlObj = new URL(url)
+        const result: Record<string, string> = {}
+        const prefixDot = `${prefix}.`
+
+        for (const [key, value] of urlObj.searchParams.entries()) {
+            if (key.startsWith(prefixDot)) {
+                const name = key.slice(prefixDot.length)
+                if (name) {
+                    result[name] = value
+                }
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * 从 URL 的 cookie.* 参数构建 Cookie 字符串
+     *
+     * @param url URL 字符串
+     * @returns Cookie 字符串，无参数时返回 null
+     */
+    protected buildCookieFromParams(url: string): string | null {
+        const cookies = this.extractPrefixedParams(url, 'cookie')
+        const parts = Object.entries(cookies).map(([k, v]) => `${k}=${v}`)
+        return parts.length > 0 ? parts.join('; ') : null
+    }
+
+    /**
+     * 从 URL 的 header.* 参数提取自定义请求头
+     *
+     * @param url URL 字符串
+     * @returns 请求头键值对，无参数时返回空对象
+     */
+    protected buildHeadersFromParams(url: string): Record<string, string> {
+        return this.extractPrefixedParams(url, 'header')
+    }
+
+    /**
      * 将各种格式的 WebSocket 数据转换为字符串
      */
     protected dataToString(data: unknown): string {

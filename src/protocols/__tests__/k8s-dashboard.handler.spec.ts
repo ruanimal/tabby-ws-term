@@ -17,14 +17,14 @@ describe('K8sDashboardHandler', () => {
         })
 
         describe('getWebSocketOptions', () => {
-            it('should include Cookie header for gateway auth', () => {
+            it('should include Cookie header from cookie.* params', () => {
                 const handler = new K8sDashboardHandler()
-                const url = 'ws://example.com?jweToken=token123&username=admin&authMode=token'
+                const url = 'ws://example.com?cookie.jweToken=token123&cookie.username=admin&cookie.authMode=token'
                 const result = handler.getWebSocketOptions(url)
-                expect(result.headers?.Cookie).toBe('authMode=token; username=admin; jweToken=token123')
+                expect(result.headers?.Cookie).toBe('jweToken=token123; username=admin; authMode=token')
             })
 
-            it('should not set Cookie header when no auth params', () => {
+            it('should not set Cookie header when no cookie.* params', () => {
                 const handler = new K8sDashboardHandler()
                 const url = 'ws://example.com'
                 const result = handler.getWebSocketOptions(url)
@@ -33,7 +33,7 @@ describe('K8sDashboardHandler', () => {
 
             it('should set Origin header from URL', () => {
                 const handler = new K8sDashboardHandler()
-                const url = 'wss://k8s.example.com/path?token=xxx'
+                const url = 'wss://k8s.example.com/path?cookie.token=xxx'
                 const result = handler.getWebSocketOptions(url)
                 expect(result.headers?.Origin).toBe('wss://k8s.example.com')
             })
@@ -46,51 +46,71 @@ describe('K8sDashboardHandler', () => {
             })
         })
 
-        describe('buildAuthCookie', () => {
-            it('should extract jweToken and build Cookie', () => {
+        describe('buildCookieFromParams (cookie.* convention)', () => {
+            it('should extract cookie.jweToken and build Cookie', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie('ws://example.com?jweToken=token123')
+                const result = (handler as any).buildCookieFromParams('ws://example.com?cookie.jweToken=token123')
                 expect(result).toBe('jweToken=token123')
             })
 
-            it('should extract username and build Cookie', () => {
+            it('should extract cookie.username and build Cookie', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie('ws://example.com?username=admin')
+                const result = (handler as any).buildCookieFromParams('ws://example.com?cookie.username=admin')
                 expect(result).toBe('username=admin')
             })
 
-            it('should extract authMode and build Cookie', () => {
+            it('should extract cookie.authMode and build Cookie', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie('ws://example.com?authMode=token')
+                const result = (handler as any).buildCookieFromParams('ws://example.com?cookie.authMode=token')
                 expect(result).toBe('authMode=token')
             })
 
-            it('should combine multiple auth parameters in correct order', () => {
+            it('should combine multiple cookie.* parameters', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie('ws://example.com?jweToken=token123&username=admin&authMode=token')
+                const result = (handler as any).buildCookieFromParams('ws://example.com?cookie.authMode=token&cookie.username=admin&cookie.jweToken=token123')
                 expect(result).toBe('authMode=token; username=admin; jweToken=token123')
             })
 
-            it('should return null when no auth parameters', () => {
+            it('should return null when no cookie.* parameters', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie('ws://example.com')
+                const result = (handler as any).buildCookieFromParams('ws://example.com')
                 expect(result).toBeNull()
+            })
+
+            it('should ignore non-prefixed parameters', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildCookieFromParams('ws://example.com?authMode=token&pod=nginx')
+                expect(result).toBeNull()
+            })
+
+            it('should handle cookie.Authorization', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildCookieFromParams('ws://example.com?cookie.Authorization=eyJhbGci')
+                expect(result).toBe('Authorization=eyJhbGci')
             })
         })
 
-        describe('extractJweToken', () => {
-            it('should extract raw jweToken from URL', () => {
+        describe('buildHeadersFromParams (header.* convention)', () => {
+            it('should extract header.jwetoken', () => {
                 const handler = new K8sDashboardHandler()
                 const jweJson = '{"protected":"eyJhbGci","encrypted_key":"abc"}'
-                const url = `ws://example.com?jweToken=${encodeURIComponent(jweJson)}`
-                const result = (handler as any).extractJweToken(url)
-                expect(result).toBe(jweJson)
+                const url = `ws://example.com?header.jwetoken=${encodeURIComponent(jweJson)}`
+                const result = (handler as any).buildHeadersFromParams(url)
+                expect(result.jwetoken).toBe(jweJson)
             })
 
-            it('should return null when no jweToken param', () => {
+            it('should return empty object when no header.* params', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).extractJweToken('ws://example.com?username=admin')
-                expect(result).toBeNull()
+                const result = (handler as any).buildHeadersFromParams('ws://example.com?cookie.username=admin')
+                expect(result).toEqual({})
+            })
+
+            it('should extract multiple headers', () => {
+                const handler = new K8sDashboardHandler()
+                const url = 'ws://example.com?header.X-Custom=foo&header.X-Other=bar'
+                const result = (handler as any).buildHeadersFromParams(url)
+                expect(result['X-Custom']).toBe('foo')
+                expect(result['X-Other']).toBe('bar')
             })
         })
 
@@ -356,20 +376,26 @@ describe('K8sDashboardHandler', () => {
     })
 
     describe('Integration Tests', () => {
-        const TEST_URL = 'wss://dashboard.example.com?pod=nginx&namespace=default&authMode=token&username=admin&jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token'
+        const TEST_URL = 'wss://dashboard.example.com?pod=nginx&namespace=default&cookie.authMode=token&cookie.username=admin&cookie.jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token&header.jwetoken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token'
 
         describe('典型 URL 处理', () => {
             it('getWebSocketOptions should include Cookie and Origin', () => {
                 const handler = new K8sDashboardHandler()
                 const result = handler.getWebSocketOptions(TEST_URL)
-                expect(result.headers?.Cookie).toBeDefined()
+                expect(result.headers?.Cookie).toBe('authMode=token; username=admin; jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token')
                 expect(result.headers?.Origin).toBe('wss://dashboard.example.com')
             })
 
-            it('buildAuthCookie should extract all auth params', () => {
+            it('buildCookieFromParams should extract all cookie.* params', () => {
                 const handler = new K8sDashboardHandler()
-                const result = (handler as any).buildAuthCookie(TEST_URL)
+                const result = (handler as any).buildCookieFromParams(TEST_URL)
                 expect(result).toBe('authMode=token; username=admin; jweToken=eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token')
+            })
+
+            it('buildHeadersFromParams should extract header.jwetoken', () => {
+                const handler = new K8sDashboardHandler()
+                const result = (handler as any).buildHeadersFromParams(TEST_URL)
+                expect(result.jwetoken).toBe('eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.test-token')
             })
         })
 

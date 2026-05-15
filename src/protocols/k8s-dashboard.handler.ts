@@ -1,6 +1,16 @@
 /**
  * K8s Dashboard 协议处理器实现
  * @module protocols/k8s-dashboard.handler
+ *
+ * URL 参数约定：
+ * - 业务参数：pod, namespace(ns), container, shell
+ * - 认证参数（通过前缀约定传递）：
+ *   - cookie.authMode=token       → Cookie: authMode=token
+ *   - cookie.username=admin       → Cookie: username=admin
+ *   - cookie.jweToken=...         → Cookie: jweToken=...
+ *   - cookie.Authorization=eyJ... → Cookie: Authorization=eyJ...
+ *   - header.jwetoken=...         → Header: jwetoken: ...
+ * - 插件选项：ws-term.option.* （由上层处理，handler 不关心）
  */
 
 import { ProtocolHandler, WebSocketConnectOptions, PrepareConnectionOptions, PrepareConnectionResult } from './interface'
@@ -72,22 +82,20 @@ export class K8sDashboardHandler extends ProtocolHandler {
         }
 
         // 构建 HTTP 请求头（含认证信息）
-        // 认证通过 Cookie 传递，Dashboard 网关会从 Cookie 中解密 jweToken 并设置 Authorization 头
         const httpHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/plain, */*',
         }
-        const authCookie = this.buildAuthCookie(url)
+
+        // 从 cookie.* 参数构建 Cookie 头
+        const authCookie = this.buildCookieFromParams(url)
         if (authCookie) {
             httpHeaders.Cookie = authCookie
         }
 
-        // Dashboard 前端的 HTTP 拦截器会从 cookie 读取 jweToken 并设置 jwetoken 请求头
-        // API 模块通过 jwetoken 头（而非 Cookie）进行认证
-        const jweTokenRaw = this.extractJweToken(url)
-        if (jweTokenRaw) {
-            httpHeaders.jwetoken = jweTokenRaw
-        }
+        // 从 header.* 参数提取自定义请求头
+        const customHeaders = this.buildHeadersFromParams(url)
+        Object.assign(httpHeaders, customHeaders)
 
         // 部分反向代理网关会校验 Referer，使用 baseUrl 作为 Referer
         httpHeaders.Referer = `${baseUrl}/`
@@ -209,57 +217,11 @@ export class K8sDashboardHandler extends ProtocolHandler {
     }
 
     /**
-     * 从 URL 查询参数提取原始 jweToken（未编码）
-     * 用于设置 jwetoken 请求头，Dashboard API 模块通过此头认证。
-     *
-     * @param url URL 字符串
-     * @returns 原始 jweToken 字符串，无则返回 null
-     */
-    private extractJweToken(url: string): string | null {
-        const urlObj = new URL(url)
-        return urlObj.searchParams.get('jweToken')
-    }
-
-    /**
-     * 构建认证 Cookie
-     * 从 URL 查询参数提取认证信息，组合成 Cookie 字符串。
-     * 仅用于 HTTP API 请求（创建 exec session），不用于 WebSocket 连接。
-     *
-     * @param url URL 字符串
-     * @returns Cookie 字符串，无认证参数时返回 null
-     */
-    private buildAuthCookie(url: string): string | null {
-        const urlObj = new URL(url)
-        const params = urlObj.searchParams
-
-        const jweToken = params.get('jweToken')
-        const username = params.get('username')
-        const authMode = params.get('authMode')
-        const authorization = params.get('authorization') || params.get('Authorization')
-
-        const cookieParts: string[] = []
-        if (authMode) {
-            cookieParts.push(`authMode=${authMode}`)
-        }
-        if (username) {
-            cookieParts.push(`username=${username}`)
-        }
-        if (jweToken) {
-            cookieParts.push(`jweToken=${encodeURIComponent(jweToken)}`)
-        }
-        if (authorization) {
-            cookieParts.push(`Authorization=${authorization}`)
-        }
-
-        return cookieParts.length > 0 ? cookieParts.join('; ') : null
-    }
-
-    /**
      * 获取 WebSocket 连接选项
      * 在反向代理网关场景下，WebSocket upgrade 也需要鉴权 Cookie；
      * Dashboard 自身仅依赖 bind 消息的 SessionID 匹配，多余 Cookie 不影响。
      *
-     * @param url WebSocket URL
+     * @param url WebSocket URL（含 cookie.* / header.* 参数）
      * @returns WebSocket 连接选项
      */
     getWebSocketOptions(url: string): WebSocketConnectOptions {
@@ -269,7 +231,7 @@ export class K8sDashboardHandler extends ProtocolHandler {
             Origin: urlObj.origin,
         }
 
-        const authCookie = this.buildAuthCookie(url)
+        const authCookie = this.buildCookieFromParams(url)
         if (authCookie) {
             headers.Cookie = authCookie
         }
