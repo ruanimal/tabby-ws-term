@@ -57,7 +57,7 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     type='number',
                     [(ngModel)]='profile.options.keepaliveInterval',
                     min='0',
-                    placeholder='15000',
+                    placeholder='30000',
                 )
                 small.form-text.text-muted(translate)
                     | Send keepalive messages every N milliseconds (0 to disable, prevents idle timeout)

@@ -32,7 +32,7 @@ export class WSTermProfilesService extends QuickConnectProfileProvider<WSTermPro
             wsUrl: '',
             shell: '',
             confirmDisconnect: false,
-            keepaliveInterval: 15000,
+            keepaliveInterval: 30000,
             protocol: 'kube-exec' as ProtocolType,
             allowInsecure: false,
         },

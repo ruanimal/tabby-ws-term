@@ -439,7 +439,7 @@ configDefaults = {
         wsUrl: '',
         shell: '',
         confirmDisconnect: false,
-        keepaliveInterval: 15000,
+        keepaliveInterval: 30000,
         protocol: 'kube-exec',  // 新增默认值
     },
     clearServiceMessagesOnConnect: false,
