@@ -4,6 +4,7 @@
 
 - **kube-exec**：Kubernetes `kubectl exec` 风格的 WebSocket 连接（默认）
 - **ttyd**：[ttyd](https://github.com/tsl0922/ttyd) WebSocket 终端连接
+- **k8s-dashboard**：Kubernetes Dashboard（SockJS）终端会话
 
 连接后，可以像使用 Tabby 原生标签页一样使用。
 
@@ -37,7 +38,8 @@
 | `ws-term.option.shell` | 连接后执行的 shell 命令 | 服务端定义 |
 | `ws-term.option.title` | Tabby 中显示的 Tab 标题 | `host + pathname` |
 | `ws-term.option.allowInsecure` | 是否允许自签名证书（跳过证书验证） | `false` |
-| `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `true` |
+| `ws-term.option.confirmDisconnect` | 断开连接时显示确认弹窗（`true`/`false`） | `false` |
+| `ws-term.option.keepaliveInterval` | 保活间隔（毫秒，0 为禁用） | `30000` |
 
 ### URL 格式
 

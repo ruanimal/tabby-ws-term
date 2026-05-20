@@ -6,6 +6,7 @@ A Tabby plugin for connecting to WebSocket terminal sessions, supporting multipl
 
 - **kube-exec**: Kubernetes `kubectl exec` style WebSocket connections (default)
 - **ttyd**: [ttyd](https://github.com/tsl0922/ttyd) WebSocket terminal connections
+- **k8s-dashboard**: Kubernetes Dashboard (SockJS) terminal sessions
 
 Once connected, it functions just like a native Tabby tab.
 
@@ -39,7 +40,8 @@ When using CLI `quickConnect` or URL schema, extra options can be passed via URL
 | `ws-term.option.shell` | Shell command to execute after connecting | Server-defined |
 | `ws-term.option.title` | Tab title displayed in Tabby | `host + pathname` |
 | `ws-term.option.allowInsecure` | Allow self-signed certificates (skip TLS verification) | `false` |
-| `ws-term.option.confirmDisconnect` | Show confirmation dialog on disconnect (`true`/`false`) | `true` |
+| `ws-term.option.confirmDisconnect` | Show confirmation dialog on disconnect (`true`/`false`) | `false` |
+| `ws-term.option.keepaliveInterval` | Keep-alive interval in milliseconds (0 to disable) | `30000` |
 
 ### URL Format
 
